@@ -1,31 +1,48 @@
 import 'package:flutter/material.dart';
-import '../../main.dart' show signInAnon; // optional: reuse your sign-in
+import '../../../main.dart' show signInAnon;
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // required for AutomaticKeepAliveClientMixin
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),
-      body: ListView(
+      body: Padding(
         padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Home content here'),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pushNamed('/details', arguments: 'Home Details'),
-            child: const Text('Open Home Details (slides)'),
-          ),
-          const SizedBox(height: 16),
-          // Keep your Firebase test button if you like:
-          OutlinedButton(
-            onPressed: () async => await signInAnon(),
-            child: const Text('Sign in Anonymously'),
-          ),
-        ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Welcome to the Home tab.',
+              style: TextStyle(fontSize: 18),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () async {
+                await signInAnon();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Signed in anonymously!')),
+                  );
+                }
+              },
+              child: const Text('Sign in Anonymously'),
+            ),
+          ],
+        ),
       ),
     );
   }
