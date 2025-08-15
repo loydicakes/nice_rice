@@ -8,6 +8,8 @@ import 'pages/homepage/home_page.dart';
 import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
 
+import 'dart:ui'; // for ImageFilter
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -82,26 +84,53 @@ class _AppShellState extends State<AppShell> {
         onPageChanged: (i) => setState(() => _index = i),
         children: const [HomePage(), AutomationPage(), AnalyticsPage()],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _onTapTab,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1), // translucent glass
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: NavigationBar(
+                height: 65,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                indicatorColor: Colors.transparent, // no background indicator
+                selectedIndex: _index,
+                onDestinationSelected: _onTapTab,
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(
+                      Icons.home,
+                      color: Color.fromARGB(255, 45, 79, 43),
+                    ),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.auto_awesome_motion_outlined),
+                    selectedIcon: Icon(
+                      Icons.auto_awesome_motion,
+                      color: Colors.white,
+                    ),
+                    label: 'Automation',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.analytics_outlined),
+                    selectedIcon: Icon(Icons.analytics, color: Colors.white),
+                    label: 'Analytics',
+                  ),
+                ],
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              ),
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_motion_outlined),
-            selectedIcon: Icon(Icons.auto_awesome_motion),
-            label: 'Automation',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-        ],
+        ),
       ),
     );
   }
