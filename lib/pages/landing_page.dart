@@ -25,20 +25,14 @@ class LandingPage extends StatelessWidget {
               // Headline text
               const Text(
                 "Welcome to NiceRice",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
 
               // Subheadline text
               const Text(
                 "Control your device anytime, anywhere.\nAutomation made simple.",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const Spacer(),
 
