@@ -1,14 +1,13 @@
-// Project-level build.gradle (Groovy)
-// Merged to include Google Services and repository settings,
-// plus custom build directory layout and clean task.
+// android/build.gradle (Groovy)
 
 buildscript {
-    dependencies {
-        classpath 'com.google.gms:google-services:4.4.2'
-    }
     repositories {
         google()
         mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.6.0'
+        classpath 'com.google.gms:google-services:4.4.2'
     }
 }
 
@@ -19,24 +18,11 @@ allprojects {
     }
 }
 
-// Optional: relocate build directories (non-standard but matches your snippet).
-// If you don't need this, you can remove this whole section.
-
-def newBuildDir = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.set(newBuildDir)
-
+// (Optional) If you had this block, you can keep it in Groovy:
 subprojects { proj ->
-    def newSubprojectBuildDir = newBuildDir.dir(proj.name)
-    proj.layout.buildDirectory.set(newSubprojectBuildDir)
+    // custom build dir logic (only if you really need it)
 }
 
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-// Clean task
-// (Flutter templates usually use `delete rootProject.buildDir`,
-// but this version matches the Provider API of Gradle 8.)
-tasks.register('clean', Delete) {
+tasks.register("clean", Delete) {
     delete rootProject.layout.buildDirectory
 }
