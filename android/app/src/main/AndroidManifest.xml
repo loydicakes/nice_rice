@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="nice_rice"
+        android:label="nice_rice_fixed"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
