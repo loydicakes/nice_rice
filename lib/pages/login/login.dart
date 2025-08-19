@@ -1,6 +1,7 @@
 // lib/pages/login/login.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,6 +14,8 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
 
   bool _isLoginMode = true; // false = Create Account
   bool _obscure = true;
@@ -23,6 +26,8 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     super.dispose();
   }
 
@@ -45,10 +50,13 @@ class _LoginPageState extends State<LoginPage> {
         );
       } else {
         // CREATE ACCOUNT
-        await auth.createUserWithEmailAndPassword(
+        final cred = await auth.createUserWithEmailAndPassword(
           email: _email.text.trim(),
           password: _password.text,
         );
+
+        // Create user profile in Firestore
+        await _createUserProfile(cred);
         // (Optional) Send verification:
         // await auth.currentUser?.sendEmailVerification();
       }
@@ -71,6 +79,27 @@ class _LoginPageState extends State<LoginPage> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _createUserProfile(UserCredential cred) async {
+    final user = cred.user;
+    if (user == null) return;
+
+    final first = _firstName.text.trim();
+    final last = _lastName.text.trim();
+    final full = [first, last].where((s) => s.isNotEmpty).join(' ');
+
+    final users = FirebaseFirestore.instance.collection('users');
+
+    await users.doc(user.uid).set({
+      'uid': user.uid,
+      'email': user.email,
+      'firstName': first,
+      'lastName': last,
+      'fullName': full,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> _resetPassword() async {
@@ -149,6 +178,43 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 12),
                       ],
+
+                      // First/Last name only in Create Account mode
+                      if (!_isLoginMode) ...[
+                        TextFormField(
+                          controller: _firstName,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'First name',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          validator: (v) {
+                            if (_isLoginMode) return null;
+                            if (v == null || v.trim().isEmpty) {
+                              return 'First name is required';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _lastName,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Last name',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          validator: (v) {
+                            if (_isLoginMode) return null;
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Last name is required';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       TextFormField(
                         controller: _email,
                         autofillHints: const [AutofillHints.email],
