@@ -51,13 +51,13 @@ class MyApp extends StatelessWidget {
       ),
 
       // Start with Splash → then Landing → then AppShell
-      initialRoute: '/splash',
+      initialRoute: '/login',
       routes: {
         "/splash": (context) => const SplashScreen(),
         "/landing": (context) => const LandingPage(),
         "/home": (context) => const HomePage(),
         '/main': (context) => const AppShell(),
-
+        "/login": (context) => const LoginPage(),
       },
     );
   }
