@@ -18,7 +18,6 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-
 // Optional: keep for your existing HomePage button if desired
 Future<void> signInAnon() async {
   final cred = await FirebaseAuth.instance.signInAnonymously();
@@ -120,9 +119,9 @@ class _AppShellState extends State<AppShell> {
             filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
+                border: Border.all(color: Colors.white),
               ),
               child: NavigationBar(
                 height: 65,
@@ -134,12 +133,18 @@ class _AppShellState extends State<AppShell> {
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home, color: Color.fromARGB(255, 45, 79, 43)),
+                    selectedIcon: Icon(
+                      Icons.home,
+                      color: Color.fromARGB(255, 45, 79, 43),
+                    ),
                     label: 'Home',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.auto_awesome_motion_outlined),
-                    selectedIcon: Icon(Icons.auto_awesome_motion, color: Colors.white),
+                    selectedIcon: Icon(
+                      Icons.auto_awesome_motion,
+                      color: Colors.white,
+                    ),
                     label: 'Automation',
                   ),
                   NavigationDestination(
@@ -157,4 +162,3 @@ class _AppShellState extends State<AppShell> {
     );
   }
 }
-
