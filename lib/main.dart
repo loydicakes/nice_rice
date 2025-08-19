@@ -10,7 +10,11 @@ import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
 import 'pages/login/login.dart'; // <-- add this
 
-import 'dart:ui';
+// Landing flow
+import 'pages/landingpage/splash_screen.dart';
+import 'pages/landingpage/landing_page.dart';
+
+import 'dart:ui'; // for ImageFilter
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,8 +22,7 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-
-// Optional: keep for your existing HomePage button if desired
+// Keep this available to call from any page
 Future<void> signInAnon() async {
   final cred = await FirebaseAuth.instance.signInAnonymously();
   debugPrint('Signed in: ${cred.user?.uid}');
@@ -46,32 +49,15 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
-      home: const AuthGate(), // <-- use AuthGate now
-    );
-  }
-}
 
-// SWITCHER between Login and AppShell based on auth state.
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+      // Start with Splash → then Landing → then AppShell
+      initialRoute: '/splash',
+      routes: {
+        "/splash": (context) => const SplashScreen(),
+        "/landing": (context) => const LandingPage(),
+        "/home": (context) => const HomePage(),
+        '/main': (context) => const AppShell(),
 
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final user = snap.data;
-        if (user == null) {
-          // Signed OUT → show LoginPage
-          return const LoginPage();
-        }
-        // Signed IN → show your tabbed app
-        return const AppShell();
       },
     );
   }
@@ -134,12 +120,14 @@ class _AppShellState extends State<AppShell> {
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home, color: Color.fromARGB(255, 45, 79, 43)),
+                    selectedIcon: Icon(Icons.home,
+                        color: Color.fromARGB(255, 45, 79, 43)),
                     label: 'Home',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.auto_awesome_motion_outlined),
-                    selectedIcon: Icon(Icons.auto_awesome_motion, color: Colors.white),
+                    selectedIcon: Icon(Icons.auto_awesome_motion,
+                        color: Colors.white),
                     label: 'Automation',
                   ),
                   NavigationDestination(
