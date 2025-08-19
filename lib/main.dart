@@ -1,14 +1,16 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
-// Your pages (match your folders)
+// Your pages
 import 'pages/homepage/home_page.dart';
 import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
+import 'pages/login/login.dart'; // <-- add this
 
-import 'dart:ui'; // for ImageFilter
+import 'dart:ui';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,8 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-// Keep this available to call from any page (e.g., HomePage button)
+
+// Optional: keep for your existing HomePage button if desired
 Future<void> signInAnon() async {
   final cred = await FirebaseAuth.instance.signInAnonymously();
   debugPrint('Signed in: ${cred.user?.uid}');
@@ -33,7 +36,6 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
-        // Slide-only transitions for any future pushes
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -44,7 +46,33 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
-      home: const AppShell(),
+      home: const AuthGate(), // <-- use AuthGate now
+    );
+  }
+}
+
+// SWITCHER between Login and AppShell based on auth state.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final user = snap.data;
+        if (user == null) {
+          // Signed OUT → show LoginPage
+          return const LoginPage();
+        }
+        // Signed IN → show your tabbed app
+        return const AppShell();
+      },
     );
   }
 }
@@ -80,7 +108,7 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: PageView(
         controller: _controller,
-        physics: const BouncingScrollPhysics(), // swipe between tabs
+        physics: const BouncingScrollPhysics(),
         onPageChanged: (i) => setState(() => _index = i),
         children: const [HomePage(), AutomationPage(), AnalyticsPage()],
       ),
@@ -92,7 +120,7 @@ class _AppShellState extends State<AppShell> {
             filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1), // translucent glass
+                color: Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.white.withOpacity(0.2)),
               ),
@@ -100,24 +128,18 @@ class _AppShellState extends State<AppShell> {
                 height: 65,
                 backgroundColor: Colors.transparent,
                 elevation: 0,
-                indicatorColor: Colors.transparent, // no background indicator
+                indicatorColor: Colors.transparent,
                 selectedIndex: _index,
                 onDestinationSelected: _onTapTab,
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(
-                      Icons.home,
-                      color: Color.fromARGB(255, 45, 79, 43),
-                    ),
+                    selectedIcon: Icon(Icons.home, color: Color.fromARGB(255, 45, 79, 43)),
                     label: 'Home',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.auto_awesome_motion_outlined),
-                    selectedIcon: Icon(
-                      Icons.auto_awesome_motion,
-                      color: Colors.white,
-                    ),
+                    selectedIcon: Icon(Icons.auto_awesome_motion, color: Colors.white),
                     label: 'Automation',
                   ),
                   NavigationDestination(
@@ -135,3 +157,4 @@ class _AppShellState extends State<AppShell> {
     );
   }
 }
+
