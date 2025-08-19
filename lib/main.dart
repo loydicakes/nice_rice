@@ -42,7 +42,7 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
-      home: const AuthGate(), // <-- use AuthGate now
+      home: const AuthGate(),
     );
   }
 }
@@ -61,12 +61,14 @@ class AuthGate extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
+
         final user = snap.data;
         if (user == null) {
-          // Signed OUT → show LoginPage
+          // Signed OUT → show Google/Firebase login
           return const LoginPage();
         }
-        // Signed IN → show your tabbed app
+
+        // Signed IN → show your tabbed app from tab.dart
         return const AppShell();
       },
     );
