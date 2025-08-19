@@ -4,13 +4,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
-// Your pages
-import 'pages/homepage/home_page.dart';
-import 'pages/automation/automation.dart';
-import 'pages/analytics/analytics.dart';
-import 'pages/login/login.dart'; // <-- add this
-
-import 'dart:ui';
+// Screens
+import 'pages/login/login.dart'; // keep your Google sign-in flow here
+import 'tab.dart'; // <-- new file where AppShell (tabs) lives
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
