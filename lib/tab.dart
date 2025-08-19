@@ -7,7 +7,6 @@ import 'pages/homepage/home_page.dart';
 import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
 
-/// This is the tabbed app shell
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -55,37 +54,77 @@ class _AppShellState extends State<AppShell> {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.white),
               ),
-              child: NavigationBar(
-                height: 65,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                indicatorColor: Colors.transparent,
-                selectedIndex: _index,
-                onDestinationSelected: _onTapTab,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(
-                      Icons.home,
-                      color: Color.fromARGB(255, 45, 79, 43),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  // Optional: globally nudge density a bit more compact.
+                  visualDensity: const VisualDensity(
+                    horizontal: 0,
+                    vertical: -2,
+                  ),
+                  navigationBarTheme: NavigationBarThemeData(
+                    height: 60, // ↓ tighter bar brings icon/label closer
+                    labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                      final selected = states.contains(WidgetState.selected);
+                      return const TextStyle(
+                        fontSize: 12,
+                        height: 0.82, // ↓ tighter label line-height
+                        fontWeight: FontWeight.w600,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ).copyWith(
+                        color: selected
+                            ? Color.fromARGB(255, 45, 79, 43)
+                            : Color.fromARGB(50, 0, 0, 0),
+                      );
+                    }),
+                    iconTheme: WidgetStateProperty.resolveWith((states) {
+                      final selected = states.contains(WidgetState.selected);
+                      return IconThemeData(size: selected ? 40 : 39);
+                    }),
+                  ),
+                ),
+                child: NavigationBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  indicatorColor: Colors.transparent,
+                  selectedIndex: _index,
+                  onDestinationSelected: _onTapTab,
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(
+                        Icons.home_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.home_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
+                      label: 'Home',
                     ),
-                    label: 'Home',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.auto_awesome_motion_outlined),
-                    selectedIcon: Icon(
-                      Icons.auto_awesome_motion,
-                      color: Colors.white,
+                    NavigationDestination(
+                      icon: Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
+                      label: 'Automation',
                     ),
-                    label: 'Automation',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.analytics_outlined),
-                    selectedIcon: Icon(Icons.analytics, color: Colors.white),
-                    label: 'Analytics',
-                  ),
-                ],
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                    NavigationDestination(
+                      icon: Icon(
+                        Icons.analytics_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.analytics_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
+                      label: 'Analytics',
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
       title: 'Nice Rice',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFFF5F5F5)),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
