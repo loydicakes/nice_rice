@@ -47,7 +47,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// SWITCHER between Login and AppShell based on auth state.
+/// Switches between Login and the tabbed app based on auth state.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
