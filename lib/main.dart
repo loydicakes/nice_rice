@@ -8,7 +8,8 @@ import 'firebase_options.dart';
 import 'pages/homepage/home_page.dart';
 import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
-import 'pages/login/login.dart'; // <-- add this
+import 'pages/login/login.dart'; 
+import 'pages/signup/signup.dart';
 
 // Landing flow
 import 'pages/landingpage/splash_screen.dart';
@@ -51,13 +52,15 @@ class MyApp extends StatelessWidget {
       ),
 
       // Start with Splash → then Landing → then AppShell
-      initialRoute: '/login',
+      initialRoute: '/signup',
       routes: {
         "/splash": (context) => const SplashScreen(),
         "/landing": (context) => const LandingPage(),
         "/home": (context) => const HomePage(),
         '/main': (context) => const AppShell(),
         "/login": (context) => const LoginPage(),
+        "/automation": (context) => const LoginPage(),
+        "/signup": (context) => const SignUpPage()
       },
     );
   }
