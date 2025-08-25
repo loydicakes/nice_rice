@@ -103,35 +103,50 @@ class LandingPage extends StatelessWidget {
             ),
 
             // Swipe Up Gesture Area
+            // Swipe Up Gesture Area (replace your current bottom widget with this)
             Padding(
               padding: const EdgeInsets.only(bottom: 50.0),
               child: GestureDetector(
-                onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity! < 0) {
-                    // User swiped up
+                behavior: HitTestBehavior.opaque, // catch gestures even on empty space
+                onTap: () => Navigator.pushReplacementNamed(context, '/login'), // optional tap fallback
+                onVerticalDragUpdate: (details) {
+                  // Trigger as soon as the user drags upward a bit
+                  if (details.delta.dy < -6) {
                     Navigator.pushReplacementNamed(context, '/login');
                   }
                 },
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.keyboard_arrow_up,
-                      color: Color(0xFF2d4f2b),
-                      size: 30,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Swipe Up to Get Started",
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2d4f2b),
+                onVerticalDragEnd: (details) {
+                  // Also handle fast flicks upward
+                  if ((details.primaryVelocity ?? 0) < -400) {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  }
+                },
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 120, // generous hit area for reliable gesture capture
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.keyboard_arrow_up,
+                        color: Color(0xFF2d4f2b),
+                        size: 30,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        "Swipe Up to Get Started",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2d4f2b),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            )
+
           ],
         ),
       ),
