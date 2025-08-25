@@ -4,18 +4,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
-// Your pages
-import 'pages/homepage/home_page.dart';
-import 'pages/automation/automation.dart';
-import 'pages/analytics/analytics.dart';
-import 'pages/login/login.dart'; 
-import 'pages/signup/signup.dart';
-
-// Landing flow
-import 'pages/landingpage/splash_screen.dart';
-import 'pages/landingpage/landing_page.dart';
-
-import 'dart:ui'; // for ImageFilter
+// Screens
+import 'pages/login/login.dart'; // Google/Firebase sign-in screen
+import 'tab.dart';               // AppShell (the tabbed UI)
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +14,7 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-// Keep this available to call from any page
+// Keep this available to call from any page if you still want quick anon auth
 Future<void> signInAnon() async {
   final cred = await FirebaseAuth.instance.signInAnonymously();
   debugPrint('Signed in: ${cred.user?.uid}');
@@ -38,7 +29,7 @@ class MyApp extends StatelessWidget {
       title: 'Nice Rice',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF5F5F5)),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
@@ -50,102 +41,41 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
+      // Auth-aware entry point: shows Login when signed out, AppShell when signed in
+      home: const AuthGate(),
+      // If you still need named routes (e.g., deep links), add them here.
+      // routes: {
+      //   '/login': (_) => const LoginPage(),
+      //   '/main':  (_) => const AppShell(),
+      // },
+    );
+  }
+}
 
-      // Start with Splash → then Landing → then AppShell
-      initialRoute: '/signup',
-      routes: {
-        "/splash": (context) => const SplashScreen(),
-        "/landing": (context) => const LandingPage(),
-        "/home": (context) => const HomePage(),
-        '/main': (context) => const AppShell(),
-        "/login": (context) => const LoginPage(),
-        "/automation": (context) => const LoginPage(),
-        "/signup": (context) => const SignUpPage()
+/// Switches between Login and the tabbed app based on auth state.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = snap.data;
+        if (user == null) {
+          // Signed OUT → show Google/Firebase login
+          return const LoginPage();
+        }
+
+        // Signed IN → show your tabbed app from tab.dart
+        return const AppShell();
       },
     );
   }
 }
-
-class AppShell extends StatefulWidget {
-  const AppShell({super.key});
-
-  @override
-  State<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends State<AppShell> {
-  final _controller = PageController();
-  int _index = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onTapTab(int i) {
-    setState(() => _index = i);
-    _controller.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: PageView(
-        controller: _controller,
-        physics: const BouncingScrollPhysics(),
-        onPageChanged: (i) => setState(() => _index = i),
-        children: const [HomePage(), AutomationPage(), AnalyticsPage()],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
-              ),
-              child: NavigationBar(
-                height: 65,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                indicatorColor: Colors.transparent,
-                selectedIndex: _index,
-                onDestinationSelected: _onTapTab,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home,
-                        color: Color.fromARGB(255, 45, 79, 43)),
-                    label: 'Home',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.auto_awesome_motion_outlined),
-                    selectedIcon: Icon(Icons.auto_awesome_motion,
-                        color: Colors.white),
-                    label: 'Automation',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.analytics_outlined),
-                    selectedIcon: Icon(Icons.analytics, color: Colors.white),
-                    label: 'Analytics',
-                  ),
-                ],
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../main.dart' show signInAnon;
 import 'package:firebase_auth/firebase_auth.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,9 +17,9 @@ class _HomePageState extends State<HomePage>
     await FirebaseAuth.instance.signOut();
     // AuthGate in main.dart will automatically redirect to LoginPage
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signed out!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Signed out!')));
     }
   }
 
@@ -38,30 +37,11 @@ class _HomePageState extends State<HomePage>
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Welcome to the Home tab.',
-              style: TextStyle(fontSize: 18),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () async {
-                await signInAnon();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Signed in anonymously!')),
-                  );
-                }
-              },
-              child: const Text('Sign in Anonymously'),
-            ),
-          ],
+      body: const Center(
+        child: Text(
+          'Welcome to the Home tab.',
+          style: TextStyle(fontSize: 18),
+          textAlign: TextAlign.center,
         ),
       ),
     );

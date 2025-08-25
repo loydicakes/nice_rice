@@ -1,5 +1,7 @@
+// lib/pages/login/login.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class LoginPage extends StatefulWidget {
@@ -13,6 +15,8 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
 
   bool _isLoginMode = true;
   bool _obscure = true;
@@ -24,7 +28,13 @@ class _LoginPageState extends State<LoginPage> {
     final pass = _password.text;
     final hasAt = email.contains("@");
     final hasDot = email.contains(".");
-    return email.isNotEmpty && hasAt && hasDot && pass.length >= 6;
+    final baseValid = email.isNotEmpty && hasAt && hasDot && pass.length >= 6;
+
+    if (_isLoginMode) return baseValid;
+    // In sign-up mode ensure names are present
+    return baseValid &&
+        _firstName.text.trim().isNotEmpty &&
+        _lastName.text.trim().isNotEmpty;
   }
 
   @override
@@ -33,12 +43,16 @@ class _LoginPageState extends State<LoginPage> {
     // Rebuild whenever user types
     _email.addListener(() => setState(() {}));
     _password.addListener(() => setState(() {}));
+    _firstName.addListener(() => setState(() {}));
+    _lastName.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     super.dispose();
   }
 
@@ -59,10 +73,17 @@ class _LoginPageState extends State<LoginPage> {
           password: _password.text,
         );
       } else {
-        await auth.createUserWithEmailAndPassword(
+        // CREATE ACCOUNT
+        final cred = await auth.createUserWithEmailAndPassword(
           email: _email.text.trim(),
           password: _password.text,
         );
+
+        // Create user profile in Firestore
+        await _createUserProfile(cred);
+
+        // (Optional) Send verification:
+        // await auth.currentUser?.sendEmailVerification();
       }
 
       if (!mounted) return;
@@ -70,9 +91,68 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(content: Text(_isLoginMode ? 'Signed in!' : 'Account created!')),
       );
     } on FirebaseAuthException catch (e) {
-      setState(() => _errorText = e.message);
+      setState(() => _errorText = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _createUserProfile(UserCredential cred) async {
+    final user = cred.user;
+    if (user == null) return;
+
+    final first = _firstName.text.trim();
+    final last = _lastName.text.trim();
+    final full = [first, last].where((s) => s.isNotEmpty).join(' ');
+
+    final users = FirebaseFirestore.instance.collection('users');
+
+    await users.doc(user.uid).set({
+      'uid': user.uid,
+      'email': user.email,
+      'firstName': first,
+      'lastName': last,
+      'fullName': full,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _errorText = 'Enter your email to reset your password.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset email sent. Check your inbox.')),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() => _errorText = _friendlyError(e));
+    }
+  }
+
+  String _friendlyError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'That email looks invalid.';
+      case 'user-disabled':
+        return 'This user has been disabled.';
+      case 'user-not-found':
+        return 'No account found with that email.';
+      case 'wrong-password':
+        return 'Incorrect password.';
+      case 'email-already-in-use':
+        return 'An account already exists for that email.';
+      case 'weak-password':
+        return 'Please choose a stronger password (at least 6 characters).';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      default:
+        return 'Auth error: ${e.message ?? e.code}';
     }
   }
 
@@ -126,9 +206,73 @@ class _LoginPageState extends State<LoginPage> {
 
               Form(
                 key: _formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction, // ✅ show errors as typing
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: Column(
                   children: [
+                    // First/Last name only in Create Account mode
+                    if (!_isLoginMode) ...[
+                      TextFormField(
+                        controller: _firstName,
+                        textCapitalization: TextCapitalization.words,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          hintText: "First name",
+                          hintStyle: GoogleFonts.poppins(color: borderGrey),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.person_outline, color: borderGrey),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: borderGrey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: themeGreen, width: 1.5),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (_isLoginMode) return null;
+                          if (v == null || v.trim().isEmpty) {
+                            return 'First name is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _lastName,
+                        textCapitalization: TextCapitalization.words,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          hintText: "Last name",
+                          hintStyle: GoogleFonts.poppins(color: borderGrey),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.person_outline, color: borderGrey),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: borderGrey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: themeGreen, width: 1.5),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (_isLoginMode) return null;
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Last name is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // Email
                     TextFormField(
                       controller: _email,
@@ -139,7 +283,8 @@ class _LoginPageState extends State<LoginPage> {
                         hintStyle: GoogleFonts.poppins(color: borderGrey),
                         filled: true,
                         fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         prefixIcon: Icon(Icons.email_outlined, color: borderGrey),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -152,7 +297,9 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return "Enter your email";
-                        if (!v.contains("@") || !v.contains(".")) return "Enter a valid email";
+                        if (!v.contains("@") || !v.contains(".")) {
+                          return "Enter a valid email";
+                        }
                         return null;
                       },
                     ),
@@ -168,7 +315,8 @@ class _LoginPageState extends State<LoginPage> {
                         hintStyle: GoogleFonts.poppins(color: borderGrey),
                         filled: true,
                         fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         prefixIcon: Icon(Icons.lock_outline, color: borderGrey),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -192,7 +340,21 @@ class _LoginPageState extends State<LoginPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 24),
+
+                    // Forgot password (only in login mode)
+                    if (_isLoginMode)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _loading ? null : _resetPassword,
+                          child: Text(
+                            'Forgot password?',
+                            style: GoogleFonts.poppins(color: themeGreen),
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 12),
 
                     // Continue Button
                     SizedBox(
@@ -213,7 +375,7 @@ class _LoginPageState extends State<LoginPage> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    "Continue",
+                                    _isLoginMode ? "Continue" : "Create account",
                                     style: GoogleFonts.poppins(
                                       fontWeight: FontWeight.w600,
                                       color: Colors.white,
