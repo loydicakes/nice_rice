@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,10 +18,34 @@ class _LoginPageState extends State<LoginPage> {
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
 
-  bool _isLoginMode = true; // false = Create Account
+  bool _isLoginMode = true;
   bool _obscure = true;
   bool _loading = false;
   String? _errorText;
+
+  bool get _isFormValid {
+    final email = _email.text.trim();
+    final pass = _password.text;
+    final hasAt = email.contains("@");
+    final hasDot = email.contains(".");
+    final baseValid = email.isNotEmpty && hasAt && hasDot && pass.length >= 6;
+
+    if (_isLoginMode) return baseValid;
+    // In sign-up mode ensure names are present
+    return baseValid &&
+        _firstName.text.trim().isNotEmpty &&
+        _lastName.text.trim().isNotEmpty;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild whenever user types
+    _email.addListener(() => setState(() {}));
+    _password.addListener(() => setState(() {}));
+    _firstName.addListener(() => setState(() {}));
+    _lastName.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -43,7 +68,6 @@ class _LoginPageState extends State<LoginPage> {
       final auth = FirebaseAuth.instance;
 
       if (_isLoginMode) {
-        // SIGN IN
         await auth.signInWithEmailAndPassword(
           email: _email.text.trim(),
           password: _password.text,
@@ -57,27 +81,19 @@ class _LoginPageState extends State<LoginPage> {
 
         // Create user profile in Firestore
         await _createUserProfile(cred);
+
         // (Optional) Send verification:
         // await auth.currentUser?.sendEmailVerification();
       }
 
-      // Success: AuthGate in main.dart will take us to AppShell automatically.
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_isLoginMode ? 'Signed in!' : 'Account created!')),
       );
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _errorText = _friendlyError(e);
-      });
-    } catch (e) {
-      setState(() {
-        _errorText = 'Something went wrong. Please try again.';
-      });
+      setState(() => _errorText = _friendlyError(e));
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -142,157 +158,306 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = _isLoginMode ? 'Sign In' : 'Create Account';
+    final themeGreen = const Color(0xFF2D4F2B);
+    final bgGrey = const Color(0xFFF5F5F5);
+    final borderGrey = const Color(0xFF7C7C7C);
+    final buttonInactive = const Color(0xFFD7D7D7);
+    final buttonActive = const Color(0xFFA5AB85);
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      backgroundColor: bgGrey,
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Card(
-              elevation: 0,
-              color: Theme.of(context).colorScheme.surface,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_errorText != null) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.errorContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _errorText!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onErrorContainer,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo
+              Container(
+                height: 150,
+                width: 150,
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage("assets/images/1.png"),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
 
-                      // First/Last name only in Create Account mode
-                      if (!_isLoginMode) ...[
-                        TextFormField(
-                          controller: _firstName,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'First name',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                          validator: (v) {
-                            if (_isLoginMode) return null;
-                            if (v == null || v.trim().isEmpty) {
-                              return 'First name is required';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _lastName,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Last name',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                          validator: (v) {
-                            if (_isLoginMode) return null;
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Last name is required';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+              Text(
+                _isLoginMode ? "Sign in to your account" : "Create a new account",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: themeGreen,
+                ),
+              ),
+              const SizedBox(height: 24),
 
+              if (_errorText != null) ...[
+                Text(
+                  _errorText!,
+                  style: GoogleFonts.poppins(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  children: [
+                    // First/Last name only in Create Account mode
+                    if (!_isLoginMode) ...[
                       TextFormField(
-                        controller: _email,
-                        autofillHints: const [AutofillHints.email],
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined),
+                        controller: _firstName,
+                        textCapitalization: TextCapitalization.words,
+                        style: GoogleFonts.poppins(),
+                        decoration: InputDecoration(
+                          hintText: "First name",
+                          hintStyle: GoogleFonts.poppins(color: borderGrey),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.person_outline, color: borderGrey),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: borderGrey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: themeGreen, width: 1.5),
+                          ),
                         ),
                         validator: (v) {
+                          if (_isLoginMode) return null;
                           if (v == null || v.trim().isEmpty) {
-                            return 'Email is required';
+                            return 'First name is required';
                           }
-                          final hasAt = v.contains('@');
-                          final hasDot = v.contains('.');
-                          if (!hasAt || !hasDot) return 'Enter a valid email';
                           return null;
                         },
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
-                        controller: _password,
-                        autofillHints: const [AutofillHints.password],
-                        obscureText: _obscure,
+                        controller: _lastName,
+                        textCapitalization: TextCapitalization.words,
+                        style: GoogleFonts.poppins(),
                         decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            onPressed: () => setState(() => _obscure = !_obscure),
-                            icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                          hintText: "Last name",
+                          hintStyle: GoogleFonts.poppins(color: borderGrey),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          prefixIcon: Icon(Icons.person_outline, color: borderGrey),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: borderGrey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide(color: themeGreen, width: 1.5),
                           ),
                         ),
                         validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Password is required';
-                          }
-                          if (v.length < 6) {
-                            return 'Use at least 6 characters';
+                          if (_isLoginMode) return null;
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Last name is required';
                           }
                           return null;
                         },
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: _loading ? null : _submit,
-                          child: _loading
-                              ? const SizedBox(
-                              height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Text(title),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Email
+                    TextFormField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      style: GoogleFonts.poppins(),
+                      decoration: InputDecoration(
+                        hintText: "Email",
+                        hintStyle: GoogleFonts.poppins(color: borderGrey),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        prefixIcon: Icon(Icons.email_outlined, color: borderGrey),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(color: borderGrey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(color: themeGreen, width: 1.5),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: _loading ? null : _resetPassword,
-                        child: const Text('Forgot password?'),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return "Enter your email";
+                        if (!v.contains("@") || !v.contains(".")) {
+                          return "Enter a valid email";
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Password
+                    TextFormField(
+                      controller: _password,
+                      obscureText: _obscure,
+                      style: GoogleFonts.poppins(),
+                      decoration: InputDecoration(
+                        hintText: "Password",
+                        hintStyle: GoogleFonts.poppins(color: borderGrey),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        prefixIcon: Icon(Icons.lock_outline, color: borderGrey),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(color: borderGrey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide(color: themeGreen, width: 1.5),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility_off : Icons.visibility,
+                            color: borderGrey,
+                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return "Enter your password";
+                        if (v.length < 6) return "Password must be at least 6 characters";
+                        return null;
+                      },
+                    ),
+
+                    // Forgot password (only in login mode)
+                    if (_isLoginMode)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _loading ? null : _resetPassword,
+                          child: Text(
+                            'Forgot password?',
+                            style: GoogleFonts.poppins(color: themeGreen),
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 12),
+
+                    // Continue Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isFormValid ? buttonActive : buttonInactive,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: _isFormValid && !_loading ? _submit : null,
+                        child: _loading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2)
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _isLoginMode ? "Continue" : "Create account",
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.arrow_forward, color: Colors.white),
+                                ],
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Divider
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: borderGrey)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text("or", style: GoogleFonts.poppins(color: themeGreen)),
+                        ),
+                        Expanded(child: Divider(color: borderGrey)),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Google button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          // TODO: implement Google sign-in
+                        },
+                        icon: Image.asset("assets/images/google.png", height: 20),
+                        label: Text(
+                          "Sign in with Google",
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: themeGreen,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          side: BorderSide(color: borderGrey),
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Bottom text
+                    RichText(
+                      text: TextSpan(
+                        text: _isLoginMode
+                            ? "Don’t have an account? "
+                            : "Already have an account? ",
+                        style: GoogleFonts.poppins(color: Colors.black87),
                         children: [
-                          Text(_isLoginMode ? "Don't have an account?" : 'Already have an account?'),
-                          TextButton(
-                            onPressed: _loading
-                                ? null
-                                : () => setState(() {
-                              _isLoginMode = !_isLoginMode;
-                              _errorText = null;
-                            }),
-                            child: Text(_isLoginMode ? 'Create one' : 'Sign in'),
+                          WidgetSpan(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isLoginMode = !_isLoginMode),
+                              child: Text(
+                                _isLoginMode ? "Sign up here" : "Sign in here",
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  color: themeGreen,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),

@@ -5,13 +5,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
 // Screens
-import 'pages/login/login.dart'; // keep your Google sign-in flow here
-import 'tab.dart'; // <-- new file where AppShell (tabs) lives
+import 'pages/login/login.dart'; // Google/Firebase sign-in screen
+import 'tab.dart';               // AppShell (the tabbed UI)
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
+}
+
+// Keep this available to call from any page if you still want quick anon auth
+Future<void> signInAnon() async {
+  final cred = await FirebaseAuth.instance.signInAnonymously();
+  debugPrint('Signed in: ${cred.user?.uid}');
 }
 
 class MyApp extends StatelessWidget {
@@ -23,7 +29,7 @@ class MyApp extends StatelessWidget {
       title: 'Nice Rice',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFFF5F5F5)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF5F5F5)),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
@@ -35,7 +41,13 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
+      // Auth-aware entry point: shows Login when signed out, AppShell when signed in
       home: const AuthGate(),
+      // If you still need named routes (e.g., deep links), add them here.
+      // routes: {
+      //   '/login': (_) => const LoginPage(),
+      //   '/main':  (_) => const AppShell(),
+      // },
     );
   }
 }

@@ -1,6 +1,6 @@
 {
-    "name": "nice_rice",
-    "short_name": "nice_rice",
+    "name": "nice_rice_fixed",
+    "short_name": "nice_rice_fixed",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
