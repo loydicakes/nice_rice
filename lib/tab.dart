@@ -1,5 +1,4 @@
 // lib/tab.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 // Your pages
@@ -17,6 +16,10 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const double _pillHeight = 60;
+  static const double _pillHorizontalMargin = 16;
+  static const double _pillBottomGap = 12; // distance from bottom safe area
+
   late int _index;
   late final PageController _controller;
 
@@ -44,79 +47,123 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final view = MediaQuery.of(context);
+    final safeBottom = view.padding.bottom; // iOS home indicator / Android insets
+    final reservedBottomSpace =
+        _pillHeight + _pillBottomGap + safeBottom + 8; // keep pages clear
+
     return Scaffold(
-      body: PageView(
-        controller: _controller,
-        physics: const BouncingScrollPhysics(),
-        onPageChanged: (i) => setState(() => _index = i),
-        children: const [
-          HomePage(),
-          AutomationPage(),
-          AnalyticsPage(),
+      // Lets the page content draw under the floating pill (for nice translucency)
+      extendBody: true,
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Stack(
+        children: [
+          // PAGES — with extra bottom padding so content never sits under the pill
+          Padding(
+            padding: EdgeInsets.only(bottom: reservedBottomSpace),
+            child: PageView(
+              controller: _controller,
+              physics: const BouncingScrollPhysics(),
+              onPageChanged: (i) => setState(() => _index = i),
+              children: const [
+                HomePage(),
+                AutomationPage(),
+                AnalyticsPage(),
+              ],
+            ),
+          ),
+
+          // FLOATING PILL NAV
+          Positioned(
+            left: _pillHorizontalMargin,
+            right: _pillHorizontalMargin,
+            bottom: _pillBottomGap + safeBottom,
+            child: _FloatingPillNav(
+              height: _pillHeight,
+              index: _index,
+              onSelect: _onTapTab,
+            ),
+          ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white),
+      // No bottomNavigationBar — we’re drawing our own floating one above.
+    );
+  }
+}
+
+class _FloatingPillNav extends StatelessWidget {
+  const _FloatingPillNav({
+    required this.height,
+    required this.index,
+    required this.onSelect,
+  });
+
+  final double height;
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.white, // solid pill
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0x11000000)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 16,
+                spreadRadius: 2,
+                offset: Offset(0, 6),
               ),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
-                  navigationBarTheme: NavigationBarThemeData(
-                    height: 60,
-                    labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                      final selected = states.contains(WidgetState.selected);
-                      return const TextStyle(
-                        fontSize: 12,
-                        height: 0.82,
-                        fontWeight: FontWeight.w600,
-                        color: Color.fromARGB(50, 0, 0, 0),
-                      ).copyWith(
-                        color: selected
-                            ? const Color.fromARGB(255, 45, 79, 43)
-                            : const Color.fromARGB(50, 0, 0, 0),
-                      );
-                    }),
-                    iconTheme: WidgetStateProperty.resolveWith((states) {
-                      final selected = states.contains(WidgetState.selected);
-                      return IconThemeData(size: selected ? 40 : 39);
-                    }),
-                  ),
-                ),
-                child: NavigationBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  indicatorColor: Colors.transparent,
-                  selectedIndex: _index,
-                  onDestinationSelected: _onTapTab,
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.home_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.home_rounded, color: Color.fromARGB(255, 45, 79, 43)),
-                      label: 'Home',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(255, 45, 79, 43)),
-                      label: 'Automation',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.analytics_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.analytics_rounded, color: Color.fromARGB(255, 45, 79, 43)),
-                      label: 'Analytics',
-                    ),
-                  ],
-                ),
+            ],
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+              navigationBarTheme: const NavigationBarThemeData(
+                height: 60,
+                surfaceTintColor: Colors.transparent,
+                indicatorColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
               ),
+            ),
+            child: NavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              indicatorColor: Colors.transparent,
+              selectedIndex: index,
+              onDestinationSelected: onSelect,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_rounded,
+                      color: Color.fromARGB(50, 0, 0, 0)),
+                  selectedIcon: Icon(Icons.home_rounded,
+                      color: Color.fromARGB(255, 45, 79, 43)),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.auto_awesome_rounded,
+                      color: Color.fromARGB(50, 0, 0, 0)),
+                  selectedIcon: Icon(Icons.auto_awesome_rounded,
+                      color: Color.fromARGB(255, 45, 79, 43)),
+                  label: 'Automation',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.analytics_rounded,
+                      color: Color.fromARGB(50, 0, 0, 0)),
+                  selectedIcon: Icon(Icons.analytics_rounded,
+                      color: Color.fromARGB(255, 45, 79, 43)),
+                  label: 'Analytics',
+                ),
+              ],
             ),
           ),
         ),

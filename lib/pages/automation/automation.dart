@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:nice_rice/header.dart';
 
 class AutomationPage extends StatefulWidget {
   const AutomationPage({super.key});
@@ -219,6 +220,7 @@ class _AutomationPageState extends State<AutomationPage>
         Color.lerp(Colors.green, Colors.red, _progress) ?? Colors.green;
 
     return Scaffold(
+      appBar: const PageHeader(), 
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
