@@ -2,11 +2,8 @@
 import 'dart:collection';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:nice_rice/header.dart';
-=======
 import 'package:intl/intl.dart';
->>>>>>> dca761914743aba14bbd747431bf07fdad256de7
 
 /// ------------ Data models ------------
 class MoistureReading {
@@ -102,12 +99,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     _selectedOpId ??= selected?.id;
 
     return Scaffold(
-<<<<<<< HEAD
-      appBar: const PageHeader(), 
-      body: const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('Analytics overview will appear here.'),
-=======
       appBar: AppBar(title: const Text('Reports')),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -139,7 +130,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ],
           ],
         ),
->>>>>>> dca761914743aba14bbd747431bf07fdad256de7
       ),
     );
   }
