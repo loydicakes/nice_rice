@@ -5,6 +5,9 @@ import 'package:fluttertoast/fluttertoast.dart';
 
 class AutomationPage extends StatefulWidget {
   const AutomationPage({super.key});
+  // ⬇️ HomePage reads these directly
+  static final ValueNotifier<bool> isActive = ValueNotifier<bool>(false);
+  static final ValueNotifier<double> progress = ValueNotifier<double>(0.0);
 
   @override
   State<AutomationPage> createState() => _AutomationPageState();
@@ -40,32 +43,32 @@ class _AutomationPageState extends State<AutomationPage>
     });
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _sensorTimer?.cancel();
-    super.dispose();
-  }
-
   void _startTimer() {
     if (_remaining.inSeconds > 0) {
       setState(() {
         _isRunning = true;
         _isPaused = false;
       });
+
+      // show progress on Home
+      AutomationPage.isActive.value = true;
+      AutomationPage.progress.value = _progress;
+
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (_remaining.inSeconds > 0) {
           setState(() {
             _remaining -= const Duration(seconds: 1);
           });
+          AutomationPage.progress.value = _progress; // live update
         } else {
-          // Finished
           _timer?.cancel();
           setState(() {
             _isRunning = false;
             _isPaused = false;
           });
+          AutomationPage.isActive.value = false; // hide on Home
+          AutomationPage.progress.value = 0.0;
         }
       });
     }
@@ -77,6 +80,8 @@ class _AutomationPageState extends State<AutomationPage>
       _isPaused = true;
       _isRunning = false;
     });
+    AutomationPage.isActive.value = true; // keep bar visible while paused
+    AutomationPage.progress.value = _progress; // freeze value
   }
 
   void _resumeTimer() {
@@ -85,17 +90,29 @@ class _AutomationPageState extends State<AutomationPage>
       _isPaused = false;
       _isRunning = true;
     });
+    AutomationPage.isActive.value = true;
+    AutomationPage.progress.value = _progress;
   }
 
   void _stopTimer() {
     _timer?.cancel();
     setState(() {
       _remaining = const Duration(seconds: 0);
-      _initial = const Duration(seconds: 0); // clear memory
+      _initial = const Duration(seconds: 0);
       _isPaused = false;
       _isRunning = false;
     });
-    Fluttertoast.showToast(msg: "Operation has stopped");
+    AutomationPage.isActive.value = false;
+    AutomationPage.progress.value = 0.0;
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _sensorTimer?.cancel();
+    AutomationPage.isActive.value = false; // safety reset
+    AutomationPage.progress.value = 0.0;
+    super.dispose();
   }
 
   String _formatTime(Duration d) {
