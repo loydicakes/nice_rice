@@ -31,7 +31,6 @@ class _LoginPageState extends State<LoginPage> {
     final baseValid = email.isNotEmpty && hasAt && hasDot && pass.length >= 6;
 
     if (_isLoginMode) return baseValid;
-    // In sign-up mode ensure names are present
     return baseValid &&
         _firstName.text.trim().isNotEmpty &&
         _lastName.text.trim().isNotEmpty;
@@ -40,7 +39,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    // Rebuild whenever user types
     _email.addListener(() => setState(() {}));
     _password.addListener(() => setState(() {}));
     _firstName.addListener(() => setState(() {}));
@@ -73,22 +71,24 @@ class _LoginPageState extends State<LoginPage> {
           password: _password.text,
         );
       } else {
-        // CREATE ACCOUNT
         final cred = await auth.createUserWithEmailAndPassword(
           email: _email.text.trim(),
           password: _password.text,
         );
-
-        // Create user profile in Firestore
         await _createUserProfile(cred);
-
-        // (Optional) Send verification:
-        // await auth.currentUser?.sendEmailVerification();
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_isLoginMode ? 'Signed in!' : 'Account created!')),
+      );
+
+      // ✅ Go to AppShell (tabbed app), select Home tab
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main',
+        (route) => false,
+        arguments: 0, // 0=Home, 1=Automation, 2=Analytics
       );
     } on FirebaseAuthException catch (e) {
       setState(() => _errorText = _friendlyError(e));
@@ -209,7 +209,6 @@ class _LoginPageState extends State<LoginPage> {
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: Column(
                   children: [
-                    // First/Last name only in Create Account mode
                     if (!_isLoginMode) ...[
                       TextFormField(
                         controller: _firstName,
@@ -220,8 +219,7 @@ class _LoginPageState extends State<LoginPage> {
                           hintStyle: GoogleFonts.poppins(color: borderGrey),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                           prefixIcon: Icon(Icons.person_outline, color: borderGrey),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(30),
@@ -234,9 +232,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         validator: (v) {
                           if (_isLoginMode) return null;
-                          if (v == null || v.trim().isEmpty) {
-                            return 'First name is required';
-                          }
+                          if (v == null || v.trim().isEmpty) return 'First name is required';
                           return null;
                         },
                       ),
@@ -250,8 +246,7 @@ class _LoginPageState extends State<LoginPage> {
                           hintStyle: GoogleFonts.poppins(color: borderGrey),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                           prefixIcon: Icon(Icons.person_outline, color: borderGrey),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(30),
@@ -264,9 +259,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         validator: (v) {
                           if (_isLoginMode) return null;
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Last name is required';
-                          }
+                          if (v == null || v.trim().isEmpty) return 'Last name is required';
                           return null;
                         },
                       ),
@@ -283,8 +276,7 @@ class _LoginPageState extends State<LoginPage> {
                         hintStyle: GoogleFonts.poppins(color: borderGrey),
                         filled: true,
                         fillColor: Colors.white,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         prefixIcon: Icon(Icons.email_outlined, color: borderGrey),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -297,9 +289,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return "Enter your email";
-                        if (!v.contains("@") || !v.contains(".")) {
-                          return "Enter a valid email";
-                        }
+                        if (!v.contains("@") || !v.contains(".")) return "Enter a valid email";
                         return null;
                       },
                     ),
@@ -315,8 +305,7 @@ class _LoginPageState extends State<LoginPage> {
                         hintStyle: GoogleFonts.poppins(color: borderGrey),
                         filled: true,
                         fillColor: Colors.white,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         prefixIcon: Icon(Icons.lock_outline, color: borderGrey),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -327,10 +316,7 @@ class _LoginPageState extends State<LoginPage> {
                           borderSide: BorderSide(color: themeGreen, width: 1.5),
                         ),
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscure ? Icons.visibility_off : Icons.visibility,
-                            color: borderGrey,
-                          ),
+                          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: borderGrey),
                           onPressed: () => setState(() => _obscure = !_obscure),
                         ),
                       ),
@@ -341,16 +327,12 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
 
-                    // Forgot password (only in login mode)
                     if (_isLoginMode)
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: _loading ? null : _resetPassword,
-                          child: Text(
-                            'Forgot password?',
-                            style: GoogleFonts.poppins(color: themeGreen),
-                          ),
+                          child: Text('Forgot password?', style: GoogleFonts.poppins(color: themeGreen)),
                         ),
                       ),
 
@@ -362,25 +344,17 @@ class _LoginPageState extends State<LoginPage> {
                       height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _isFormValid ? buttonActive : buttonInactive,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
+                          backgroundColor: _isFormValid ? const Color(0xFFA5AB85) : const Color(0xFFD7D7D7),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                         ),
                         onPressed: _isFormValid && !_loading ? _submit : null,
                         child: _loading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2)
+                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    _isLoginMode ? "Continue" : "Create account",
-                                    style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                                  Text(_isLoginMode ? "Continue" : "Create account",
+                                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white)),
                                   const SizedBox(width: 8),
                                   const Icon(Icons.arrow_forward, color: Colors.white),
                                 ],
@@ -389,41 +363,31 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Divider
                     Row(
                       children: [
-                        Expanded(child: Divider(color: borderGrey)),
+                        Expanded(child: Container(height: 1, color: borderGrey)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: Text("or", style: GoogleFonts.poppins(color: themeGreen)),
                         ),
-                        Expanded(child: Divider(color: borderGrey)),
+                        Expanded(child: Container(height: 1, color: borderGrey)),
                       ],
                     ),
                     const SizedBox(height: 24),
 
-                    // Google button
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: OutlinedButton.icon(
-                        onPressed: () {
-                          // TODO: implement Google sign-in
-                        },
+                        onPressed: () {/* TODO: Google sign-in */},
                         icon: Image.asset("assets/images/google.png", height: 20),
                         label: Text(
                           "Sign in with Google",
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: themeGreen,
-                          ),
+                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: themeGreen),
                         ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                           side: BorderSide(color: borderGrey),
                           backgroundColor: Colors.white,
                         ),
@@ -431,12 +395,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Bottom text
                     RichText(
                       text: TextSpan(
-                        text: _isLoginMode
-                            ? "Don’t have an account? "
-                            : "Already have an account? ",
+                        text: _isLoginMode ? "Don’t have an account? " : "Already have an account? ",
                         style: GoogleFonts.poppins(color: Colors.black87),
                         children: [
                           WidgetSpan(
@@ -444,10 +405,7 @@ class _LoginPageState extends State<LoginPage> {
                               onTap: () => setState(() => _isLoginMode = !_isLoginMode),
                               child: Text(
                                 _isLoginMode ? "Sign up here" : "Sign in here",
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600,
-                                  color: themeGreen,
-                                ),
+                                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: themeGreen),
                               ),
                             ),
                           ),
