@@ -1,7 +1,8 @@
+// lib/pages/home_page/home_page.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:nice_rice/pages/automation/automation.dart'; // ← adjust if your path differs
+import 'package:nice_rice/pages/automation/automation.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,16 +16,12 @@ class _HomePageState extends State<HomePage>
   @override
   bool get wantKeepAlive => true;
 
-  // Randomized storage metrics (for now)
+  // Randomized storage metrics (temp/humidity/moisture)
   final _rand = Random();
   double _tempC = 60;
   double _humidity = 38;
   double _moisture = 13;
   Timer? _sensorTimer;
-
-  // Profile pop card
-  final LayerLink _profileLink = LayerLink();
-  OverlayEntry? _profilePopup;
 
   @override
   void initState() {
@@ -41,7 +38,6 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _sensorTimer?.cancel();
-    _profilePopup?.remove();
     super.dispose();
   }
 
@@ -64,40 +60,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // ── Profile pop (blank content for now)
-  void _toggleProfilePopup() {
-    if (_profilePopup != null) {
-      _profilePopup!.remove();
-      _profilePopup = null;
-      return;
-    }
-    final overlay = Overlay.of(context);
-    _profilePopup = OverlayEntry(
-      builder: (_) => Positioned(
-        top: kToolbarHeight + MediaQuery.of(context).padding.top + 8,
-        right: 12,
-        child: CompositedTransformFollower(
-          link: _profileLink,
-          offset: const Offset(-160, 8),
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              width: 200,
-              height: 160,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              // intentionally blank
-            ),
-          ),
-        ),
-      ),
-    );
-    overlay.insert(_profilePopup!);
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -108,28 +70,7 @@ class _HomePageState extends State<HomePage>
     final gridAspect = w < 380 ? 1.1 : 1.25; // width/height ratio
 
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            const SizedBox(width: 40),
-            Image.asset('assets/images/2.png', height: 90), // logo
-            const SizedBox(width: 8),
-            Image.asset('assets/images/3.png', height: 22), // app name
-          ],
-        ),
-        actions: [
-          CompositedTransformTarget(
-            link: _profileLink,
-            child: IconButton(
-              tooltip: 'Profile',
-              onPressed: _toggleProfilePopup,
-              icon: const Icon(Icons.person_outline),
-            ),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
+      // No AppBar here — header is provided globally in main.dart
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -452,11 +393,11 @@ class _StatusTile extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Align(
+          const Align(
             alignment: Alignment.bottomLeft,
             child: Text(
               "Storage Status",
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],

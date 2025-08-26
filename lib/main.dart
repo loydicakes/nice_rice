@@ -1,12 +1,14 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
 // Screens
-import 'pages/login/login.dart'; // keep your Google sign-in flow here
-import 'tab.dart'; // <-- new file where AppShell (tabs) lives
+import 'pages/login/login.dart'; // Your Google sign-in flow
+import 'tab.dart'; // AppShell (tabs)
+import 'header.dart'; // PageHeader (extracted header)
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +25,7 @@ class MyApp extends StatelessWidget {
       title: 'Nice Rice',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Color(0xFFF5F5F5)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF5F5F5)),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
@@ -61,9 +63,25 @@ class AuthGate extends StatelessWidget {
           return const LoginPage();
         }
 
-        // Signed IN → show your tabbed app from tab.dart
-        return const AppShell();
+        // Signed IN → show global header + tabbed app content
+        return const AppWithHeader();
       },
+    );
+  }
+}
+
+/// Top-level scaffold that hosts the fixed header (like tab.dart hosts tabs).
+/// Ensure `AppShell` does NOT set an AppBar to avoid double headers.
+class AppWithHeader extends StatelessWidget {
+  const AppWithHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const PageHeader(), // <- from pages/header/header.dart
+      // If AppShell uses its own Scaffold for bottom nav, that's fine.
+      // Just keep AppShell.appBar == null.
+      body: const AppShell(),
     );
   }
 }

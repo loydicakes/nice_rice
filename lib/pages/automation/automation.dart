@@ -219,7 +219,6 @@ class _AutomationPageState extends State<AutomationPage>
         Color.lerp(Colors.green, Colors.red, _progress) ?? Colors.green;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Automation')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
