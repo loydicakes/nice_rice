@@ -8,15 +8,24 @@ import 'pages/automation/automation.dart';
 import 'pages/analytics/analytics.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  /// Which tab to open first (0 = Home, 1 = Automation, 2 = Analytics)
+  final int initialIndex;
+  const AppShell({super.key, this.initialIndex = 0});
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  final _controller = PageController();
-  int _index = 0;
+  late int _index;
+  late final PageController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: _index);
+  }
 
   @override
   void dispose() {
@@ -40,7 +49,11 @@ class _AppShellState extends State<AppShell> {
         controller: _controller,
         physics: const BouncingScrollPhysics(),
         onPageChanged: (i) => setState(() => _index = i),
-        children: const [HomePage(), AutomationPage(), AnalyticsPage()],
+        children: const [
+          HomePage(),
+          AutomationPage(),
+          AnalyticsPage(),
+        ],
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -56,24 +69,20 @@ class _AppShellState extends State<AppShell> {
               ),
               child: Theme(
                 data: Theme.of(context).copyWith(
-                  // Optional: globally nudge density a bit more compact.
-                  visualDensity: const VisualDensity(
-                    horizontal: 0,
-                    vertical: -2,
-                  ),
+                  visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
                   navigationBarTheme: NavigationBarThemeData(
-                    height: 60, // ↓ tighter bar brings icon/label closer
+                    height: 60,
                     labelTextStyle: WidgetStateProperty.resolveWith((states) {
                       final selected = states.contains(WidgetState.selected);
                       return const TextStyle(
                         fontSize: 12,
-                        height: 0.82, // ↓ tighter label line-height
+                        height: 0.82,
                         fontWeight: FontWeight.w600,
                         color: Color.fromARGB(50, 0, 0, 0),
                       ).copyWith(
                         color: selected
-                            ? Color.fromARGB(255, 45, 79, 43)
-                            : Color.fromARGB(50, 0, 0, 0),
+                            ? const Color.fromARGB(255, 45, 79, 43)
+                            : const Color.fromARGB(50, 0, 0, 0),
                       );
                     }),
                     iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -91,36 +100,18 @@ class _AppShellState extends State<AppShell> {
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   destinations: const [
                     NavigationDestination(
-                      icon: Icon(
-                        Icons.home_rounded,
-                        color: Color.fromARGB(50, 0, 0, 0),
-                      ),
-                      selectedIcon: Icon(
-                        Icons.home_rounded,
-                        color: Color.fromARGB(255, 45, 79, 43),
-                      ),
+                      icon: Icon(Icons.home_rounded, color: Color.fromARGB(50, 0, 0, 0)),
+                      selectedIcon: Icon(Icons.home_rounded, color: Color.fromARGB(255, 45, 79, 43)),
                       label: 'Home',
                     ),
                     NavigationDestination(
-                      icon: Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Color.fromARGB(50, 0, 0, 0),
-                      ),
-                      selectedIcon: Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Color.fromARGB(255, 45, 79, 43),
-                      ),
+                      icon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(50, 0, 0, 0)),
+                      selectedIcon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(255, 45, 79, 43)),
                       label: 'Automation',
                     ),
                     NavigationDestination(
-                      icon: Icon(
-                        Icons.analytics_rounded,
-                        color: Color.fromARGB(50, 0, 0, 0),
-                      ),
-                      selectedIcon: Icon(
-                        Icons.analytics_rounded,
-                        color: Color.fromARGB(255, 45, 79, 43),
-                      ),
+                      icon: Icon(Icons.analytics_rounded, color: Color.fromARGB(50, 0, 0, 0)),
+                      selectedIcon: Icon(Icons.analytics_rounded, color: Color.fromARGB(255, 45, 79, 43)),
                       label: 'Analytics',
                     ),
                   ],

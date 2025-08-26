@@ -2,20 +2,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
 import 'firebase_options.dart';
 
-// Screens
-import 'pages/login/login.dart'; // Your Google sign-in flow
-import 'tab.dart'; // AppShell (tabs)
-import 'header.dart'; // PageHeader (extracted header)
+// Screens you already have
+import 'pages/landingpage/landing_page.dart';
+import 'pages/login/login.dart';
+import 'pages/landingpage/splash_screen.dart';
+import 'pages/homepage/home_page.dart';
+import 'tab.dart'; // AppShell
+import 'header.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const MyApp());
+  runApp(const BootstrapApp()); // show something instantly
+  _init(); // do the heavy work in the background
 }
 
+Future<void> _init() async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+
+/// NOTE: MyApp is unused because you boot BootstrapApp above.
+// You can delete MyApp if you want only one MaterialApp.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -37,34 +46,43 @@ class MyApp extends StatelessWidget {
           },
         ),
       ),
-      home: const AuthGate(),
+
+      initialRoute: '/splash',
+      routes: {
+        '/splash': (_) => const SplashScreen(),
+        '/landing': (_) => const LandingPage(),
+        '/login': (_) => const LoginPage(),
+
+        // Build AppShell with optional initialIndex
+        '/main': (ctx) {
+          final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
+          return AppShell(initialIndex: initial ?? 0); // default to Home tab
+        },
+
+        // optional: direct route to Home (not used in this flow)
+        '/home': (_) => const HomePage(),
+      },
     );
   }
 }
 
-/// Switches between Login and the tabbed app based on auth state.
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
+/// This is the app you actually launch in main().
+class BootstrapApp extends StatelessWidget {
+  const BootstrapApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: const SplashScreen(),
+      routes: {
+        '/landing': (_) => const LandingPage(),
+        '/login': (_) => const LoginPage(),
 
-        final user = snap.data;
-        if (user == null) {
-          // Signed OUT → show Google/Firebase login
-          return const LoginPage();
-        }
-
-        // Signed IN → show global header + tabbed app content
-        return const AppWithHeader();
+        // Build AppShell with optional initialIndex here too
+        '/main': (ctx) {
+          final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
+          return AppShell(initialIndex: initial ?? 0);
+        },
       },
     );
   }
