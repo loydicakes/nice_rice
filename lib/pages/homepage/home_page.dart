@@ -12,8 +12,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
-    with AutomaticKeepAliveClientMixin {
+class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -36,7 +35,7 @@ class _HomePageState extends State<HomePage>
     // Fake sensor updates
     _sensorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       setState(() {
-        _tempC = 55 + _rand.nextDouble() * 10; // 55–65 °C
+        _tempC = 55 + _rand.nextDouble() * 10;   // 55–65 °C
         _humidity = 30 + _rand.nextDouble() * 15; // 30–45 %
         _moisture = 13 + _rand.nextInt(6).toDouble(); // 13–18 %
       });
@@ -90,68 +89,76 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final now = DateTime.now();
-    final w = MediaQuery.of(context).size.width;
+    final size = MediaQuery.of(context).size;
 
     // Make tiles taller to avoid overflow
-    final gridAspect = w < 380 ? 0.86 : 0.98; // width/height ratio (smaller => taller)
+    final gridAspect = size.width < 380 ? 0.86 : 0.98; // width/height ratio
+
+    // Image sizing (responsive, also drives text/button sizes)
+    final double imgHeight = size.width < 360 ? 108 : 120; // tweak as desired
+    final double imgWidth = imgHeight * 0.8;
+    final double dateFs = imgHeight * 0.15; // ~18 @ 120h
+    final double timeFs = imgHeight * 0.11; // ~13 @ 120h
+    final double btnVPad = imgHeight * 0.10; // ~12 @ 120h
+    final double btnHPad = 20;
 
     return Scaffold(
-      appBar: const PageHeader(), 
+      appBar: const PageHeader(),
       backgroundColor: bgGrey,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ───────── Phone + Date/Time + Connect (single card) ─────────
+            // ───────── Phone image + Date/Time + Connect (single card) ─────────
             Card(
               color: Colors.white,
               elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center, // center content to image height
                   children: [
-                    // Left: phone placeholder (swap with your asset anytime)
-                    Container(
-                      width: 96,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: bgGrey,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.phone_android_outlined,
-                        size: 60,
-                        color: Colors.black54,
+                    // Left: phone image (no F5F5F5 background)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        "assets/images/pon.png",
+                        width: imgWidth,
+                        height: imgHeight,
+                        fit: BoxFit.cover,
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Right: date/time + connect
+
+                    // Right: date/time + connect, vertically centered & sized relative to image
                     Expanded(
                       child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_formatDate(now),
-                              style: _textStyle(size: 16, weight: FontWeight.w700)),
-                          const SizedBox(height: 4),
-                          Text(_formatTime(now),
-                              style: _textStyle(size: 13, weight: FontWeight.w500)),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
+                          Text(
+                            _formatDate(now),
+                            style: _textStyle(size: dateFs, weight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatTime(now),
+                            style: _textStyle(size: timeFs, weight: FontWeight.w400, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 10),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(minWidth: 140),
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: darkGreen,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(100), // pill
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: btnHPad,
+                                  vertical: btnVPad,
                                 ),
                               ),
                               onPressed: () {
@@ -160,8 +167,8 @@ class _HomePageState extends State<HomePage>
                               child: Text(
                                 "Connect",
                                 style: _textStyle(
-                                  size: 14,
-                                  weight: FontWeight.w600,
+                                  size: imgHeight * 0.14, // ~16 @ 120h
+                                  weight: FontWeight.w700,
                                   color: Colors.white,
                                 ),
                               ),
@@ -181,9 +188,7 @@ class _HomePageState extends State<HomePage>
             Card(
               color: Colors.white,
               elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                 child: Column(
@@ -191,47 +196,39 @@ class _HomePageState extends State<HomePage>
                   children: [
                     Row(
                       children: [
-                        Text("Drying Chamber",
-                            style: _textStyle(size: 15, weight: FontWeight.w700)),
+                        Text("Drying Chamber", style: _textStyle(size: 15, weight: FontWeight.w700)),
                         const Spacer(),
-                        // Placeholder for machine-driven percentage — left intentionally blank, only "%" visible
                         Text("%", style: _textStyle(size: 13, weight: FontWeight.w600)),
                       ],
                     ),
                     const SizedBox(height: 10),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: const LinearProgressIndicator(
+                      child: LinearProgressIndicator(
                         value: 0.0, // start at 0%
                         minHeight: 10,
-                        backgroundColor: Color(0xFFE5EBE6),
-                        valueColor: AlwaysStoppedAnimation(darkGreen),
+                        backgroundColor: const Color(0xFFE5EBE6),
+                        valueColor: const AlwaysStoppedAnimation(darkGreen),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 14),
 
             // ───────── Storage Chamber ─────────
             Card(
               color: Colors.white,
               elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Storage Chamber",
-                        style: _textStyle(size: 16, weight: FontWeight.w700),
-                      ),
+                      child: Text("Storage Chamber", style: _textStyle(size: 16, weight: FontWeight.w700)),
                     ),
                     const SizedBox(height: 12),
                     GridView(
@@ -265,8 +262,7 @@ class _HomePageState extends State<HomePage>
                         _StatusTile(
                           status: _statusText(_moisture),
                           color: _statusColor(_statusText(_moisture)),
-                          labelStyle:
-                              _textStyle(size: 13, weight: FontWeight.w600),
+                          labelStyle: _textStyle(size: 13, weight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -318,7 +314,6 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Single layer: pure F5F5F5 with 7C7C7C border
       decoration: BoxDecoration(
         color: bgGrey,
         borderRadius: BorderRadius.circular(16),
@@ -327,16 +322,13 @@ class _MetricTile extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, // helps avoid overflow
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Icon(icon, color: darkGreen, size: 18),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: textStyle(size: 28, weight: FontWeight.w800),
-            ),
+            child: Text(value, style: textStyle(size: 28, weight: FontWeight.w800)),
           ),
           Text(label, style: textStyle(size: 13, weight: FontWeight.w600)),
         ],
@@ -362,7 +354,6 @@ class _StatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Single layer: pure F5F5F5 with 7C7C7C border
       decoration: BoxDecoration(
         color: bgGrey,
         borderRadius: BorderRadius.circular(16),
@@ -371,17 +362,13 @@ class _StatusTile extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, // avoids overflow
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Icon(Icons.storage_outlined, color: color, size: 18),
           Center(
             child: Text(
               status,
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
+              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: color),
             ),
           ),
           Align(alignment: Alignment.bottomLeft, child: Text("Storage Status", style: labelStyle)),

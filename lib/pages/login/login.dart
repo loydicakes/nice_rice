@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/gestures.dart'; // 👈 for TapGestureRecognizer
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,6 +24,9 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   String? _errorText;
 
+  // ✅ New: checkbox state
+  bool _acceptedPolicies = false;
+
   bool get _isFormValid {
     final email = _email.text.trim();
     final pass = _password.text;
@@ -30,10 +34,11 @@ class _LoginPageState extends State<LoginPage> {
     final hasDot = email.contains(".");
     final baseValid = email.isNotEmpty && hasAt && hasDot && pass.length >= 6;
 
-    if (_isLoginMode) return baseValid;
+    if (_isLoginMode) return baseValid && _acceptedPolicies;     // 👈 require checkbox
     return baseValid &&
         _firstName.text.trim().isNotEmpty &&
-        _lastName.text.trim().isNotEmpty;
+        _lastName.text.trim().isNotEmpty &&
+        _acceptedPolicies;                                        // 👈 require checkbox
   }
 
   @override
@@ -56,6 +61,10 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_acceptedPolicies) {
+      setState(() => _errorText = "Please accept the User Agreement and Privacy Policy to continue.");
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -115,6 +124,7 @@ class _LoginPageState extends State<LoginPage> {
       'fullName': full,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'acceptedPoliciesAt': FieldValue.serverTimestamp(), // 👈 record acceptance server-side
     }, SetOptions(merge: true));
   }
 
@@ -210,6 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   children: [
                     if (!_isLoginMode) ...[
+                      // First name
                       TextFormField(
                         controller: _firstName,
                         textCapitalization: TextCapitalization.words,
@@ -237,6 +248,7 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                       const SizedBox(height: 12),
+                      // Last name
                       TextFormField(
                         controller: _lastName,
                         textCapitalization: TextCapitalization.words,
@@ -338,6 +350,69 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 12),
 
+                    // ✅ Agreement row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Checkbox(
+                          value: _acceptedPolicies,
+                          onChanged: (v) => setState(() => _acceptedPolicies = v ?? false),
+                          activeColor: themeGreen,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.poppins(color: Colors.black87, fontSize: 12),
+                              children: [
+                                const TextSpan(text: "I've read and agreed to the "),
+                                TextSpan(
+                                  text: "User Agreement",
+                                  style: GoogleFonts.poppins(
+                                    color: themeGreen,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => const PolicyDialog(
+                                          title: "User Agreement",
+                                          contentType: PolicyContentType.userAgreement,
+                                        ),
+                                      );
+                                    },
+                                ),
+                                const TextSpan(text: " and "),
+                                TextSpan(
+                                  text: "Privacy Policy",
+                                  style: GoogleFonts.poppins(
+                                    color: themeGreen,
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => const PolicyDialog(
+                                          title: "Privacy Policy",
+                                          contentType: PolicyContentType.privacyPolicy,
+                                        ),
+                                      );
+                                    },
+                                ),
+                                const TextSpan(text: "."),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Continue Button
                     SizedBox(
                       width: double.infinity,
@@ -420,5 +495,68 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
+  }
+}
+
+// ======= Simple modal dialog for policies =======
+
+enum PolicyContentType { userAgreement, privacyPolicy }
+
+class PolicyDialog extends StatelessWidget {
+  final String title;
+  final PolicyContentType contentType;
+  const PolicyDialog({super.key, required this.title, required this.contentType});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeGreen = const Color(0xFF2D4F2B);
+
+    return AlertDialog(
+      title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+      content: SingleChildScrollView(
+        child: Text(
+          _contentFor(contentType),
+          style: GoogleFonts.poppins(fontSize: 13, height: 1.45),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Close', style: GoogleFonts.poppins(color: themeGreen)),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: themeGreen, foregroundColor: Colors.white),
+          onPressed: () => Navigator.pop(context),
+          child: Text('OK', style: GoogleFonts.poppins()),
+        ),
+      ],
+    );
+  }
+
+  String _contentFor(PolicyContentType type) {
+    if (type == PolicyContentType.userAgreement) {
+      return
+          // Sample User Agreement tailored to NiceRice
+          "Welcome to NiceRice. By creating an account or using the app you agree to:\n\n"
+          "1) Authorized Use: You may control only devices you own or have been granted access to by the owner.\n"
+          "2) Safety: You will follow all safety prompts and confirm you have physical access to the drying chamber when performing risky actions (e.g., calibration, emergency stop).\n"
+          "3) Data Storage: Operation logs, alerts, and configuration may be stored to provide history, analytics, diagnostics, and warranty support.\n"
+          "4) Notifications: You consent to receive operational alerts (e.g., job complete, fault, at-risk conditions).\n"
+          "5) Prohibited Actions: No attempts to bypass security, access other users’ devices, or interfere with sensors/firmware.\n"
+          "6) Transfer & Reset: Ownership changes require factory reset or owner approval.\n"
+          "7) Updates: Firmware and app updates may be required to ensure reliability and safety.\n"
+          "8) Termination: We may suspend access for policy violations or security risks.\n";
+    } else {
+      return
+          // Sample Privacy Policy tailored to NiceRice
+          "We respect your privacy. This policy explains how NiceRice handles your data:\n\n"
+          "• What we collect: Account info (name, email), device identifiers, sensor readings (temperature, humidity), operational events, and app logs.\n"
+          "• Why we collect it: To enable remote control, provide alerts, improve drying efficiency, deliver analytics/history, and offer support/warranty.\n"
+          "• Where data is processed: Secure cloud services with role-based access; sensitive operations are logged.\n"
+          "• Retention: Operational data may be retained to support long-term analytics and grain preservation goals. You can request deletion of your account data subject to legal/warranty obligations.\n"
+          "• Your choices: You can disable certain uploads (may limit analytics), export your data, or delete your account.\n"
+          "• Security: We use authentication, encrypted transport, and per-device keys; ownership transfer clears cloud bindings.\n"
+          "• Contact: For privacy requests or questions, email support@nicerice.example.\n";
+    }
   }
 }
