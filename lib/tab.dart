@@ -49,11 +49,7 @@ class _AppShellState extends State<AppShell> {
         controller: _controller,
         physics: const BouncingScrollPhysics(),
         onPageChanged: (i) => setState(() => _index = i),
-        children: const [
-          HomePage(),
-          AutomationPage(),
-          AnalyticsPage(),
-        ],
+        children: const [HomePage(), AutomationPage(), AnalyticsPage()],
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -69,7 +65,10 @@ class _AppShellState extends State<AppShell> {
               ),
               child: Theme(
                 data: Theme.of(context).copyWith(
-                  visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+                  visualDensity: const VisualDensity(
+                    horizontal: 0,
+                    vertical: -2,
+                  ),
                   navigationBarTheme: NavigationBarThemeData(
                     height: 60,
                     labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -100,18 +99,36 @@ class _AppShellState extends State<AppShell> {
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   destinations: const [
                     NavigationDestination(
-                      icon: Icon(Icons.home_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.home_rounded, color: Color.fromARGB(255, 45, 79, 43)),
+                      icon: Icon(
+                        Icons.home_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.home_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
                       label: 'Home',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(255, 45, 79, 43)),
+                      icon: Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
                       label: 'Automation',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.analytics_rounded, color: Color.fromARGB(50, 0, 0, 0)),
-                      selectedIcon: Icon(Icons.analytics_rounded, color: Color.fromARGB(255, 45, 79, 43)),
+                      icon: Icon(
+                        Icons.analytics_rounded,
+                        color: Color.fromARGB(50, 0, 0, 0),
+                      ),
+                      selectedIcon: Icon(
+                        Icons.analytics_rounded,
+                        color: Color.fromARGB(255, 45, 79, 43),
+                      ),
                       label: 'Analytics',
                     ),
                   ],

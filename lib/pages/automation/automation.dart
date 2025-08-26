@@ -1,7 +1,11 @@
+// lib/pages/automation/automation.dart
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+
+// ⬇️ Import the history repository (from analytics.dart)
+import 'package:nice_rice/pages/analytics/analytics.dart' show OperationHistory;
 
 class AutomationPage extends StatefulWidget {
   const AutomationPage({super.key});
@@ -25,6 +29,9 @@ class _AutomationPageState extends State<AutomationPage>
   bool _isPaused = false;
   bool _isRunning = false;
 
+  // Track the current operation ID for Analytics history
+  String? _currentOpId;
+
   // Simulation values (top card)
   Timer? _sensorTimer;
   final Random _rand = Random();
@@ -40,6 +47,11 @@ class _AutomationPageState extends State<AutomationPage>
         _moisture = 10 + _rand.nextDouble() * 10; // 10–20 %
         _temperature = 25 + _rand.nextDouble() * 5; // 25–30 °C
       });
+
+      // ⬇️ Log samples to the selected operation ONLY while running
+      if (_isRunning && _currentOpId != null) {
+        OperationHistory.instance.logReading(_currentOpId!, _moisture);
+      }
     });
   }
 
@@ -62,6 +74,7 @@ class _AutomationPageState extends State<AutomationPage>
           });
           AutomationPage.progress.value = _progress; // live update
         } else {
+          // ── Timer naturally finished ────────────────────────────────────
           _timer?.cancel();
           setState(() {
             _isRunning = false;
@@ -69,6 +82,13 @@ class _AutomationPageState extends State<AutomationPage>
           });
           AutomationPage.isActive.value = false; // hide on Home
           AutomationPage.progress.value = 0.0;
+
+          // ⬇️ Close the operation and log a final point for history
+          if (_currentOpId != null) {
+            OperationHistory.instance.logReading(_currentOpId!, _moisture);
+            OperationHistory.instance.endOperation(_currentOpId!);
+            _currentOpId = null;
+          }
         }
       });
     }
@@ -95,6 +115,7 @@ class _AutomationPageState extends State<AutomationPage>
   }
 
   void _stopTimer() {
+    // ── Manual stop ──────────────────────────────────────────────────────
     _timer?.cancel();
     setState(() {
       _remaining = const Duration(seconds: 0);
@@ -104,6 +125,13 @@ class _AutomationPageState extends State<AutomationPage>
     });
     AutomationPage.isActive.value = false;
     AutomationPage.progress.value = 0.0;
+
+    // ⬇️ Close the operation and log a final point for history
+    if (_currentOpId != null) {
+      OperationHistory.instance.logReading(_currentOpId!, _moisture);
+      OperationHistory.instance.endOperation(_currentOpId!);
+      _currentOpId = null;
+    }
   }
 
   @override
@@ -112,6 +140,13 @@ class _AutomationPageState extends State<AutomationPage>
     _sensorTimer?.cancel();
     AutomationPage.isActive.value = false; // safety reset
     AutomationPage.progress.value = 0.0;
+
+    // If the page is disposed mid-run, finalize any open op to avoid leaks
+    if (_currentOpId != null) {
+      OperationHistory.instance.logReading(_currentOpId!, _moisture);
+      OperationHistory.instance.endOperation(_currentOpId!);
+      _currentOpId = null;
+    }
     super.dispose();
   }
 
@@ -461,6 +496,16 @@ class _AutomationPageState extends State<AutomationPage>
                                 Fluttertoast.showToast(
                                   msg: "Operation is ongoing",
                                 );
+
+                                // ⬇️ Create an operation record for Analytics history
+                                _currentOpId = OperationHistory.instance
+                                    .startOperation();
+                                // seed an initial point
+                                OperationHistory.instance.logReading(
+                                  _currentOpId!,
+                                  _moisture,
+                                );
+
                                 // Restart from current remaining (do NOT reset to _initial)
                                 _startTimer();
                               },
