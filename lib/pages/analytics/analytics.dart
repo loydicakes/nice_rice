@@ -4,7 +4,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import 'package:nice_rice/header.dart';
+import 'package:nice_rice/theme_controller.dart'; // ThemeScope + BuildContext.brand
 
 /// ------------ Data models ------------
 class MoistureReading {
@@ -14,7 +16,7 @@ class MoistureReading {
 }
 
 class OperationRecord {
-  final String id; // e.g., timestamp or uuid
+  final String id;
   final DateTime startedAt;
   DateTime? endedAt;
   final List<MoistureReading> readings;
@@ -69,15 +71,19 @@ class OperationHistory implements OperationRepository {
   }
 
   @override
-  OperationRecord? getById(String id) =>
-      _ops.cast<OperationRecord?>().firstWhere((o) => o!.id == id, orElse: () => null);
+  OperationRecord? getById(String id) {
+    for (final o in _ops) {
+      if (o.id == id) return o;
+    }
+    return null;
+  }
 
   @override
   UnmodifiableListView<OperationRecord> get operations =>
       UnmodifiableListView(_ops.reversed); // newest first
 }
 
-/// ------------ Analytics Page (History) ------------
+/// ------------ Analytics Page ------------
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
 
@@ -86,155 +92,187 @@ class AnalyticsPage extends StatefulWidget {
 }
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
-  // THEME TOKENS (match Home/Automation)
-  static const Color bgGrey = Color(0xFFF5F5F5);
-  static const Color darkGreen = Color(0xFF2F6F4F);
-  static const Color tileBorder = Color(0xFF7C7C7C);
-  static const Color amber = Color(0xFFF9A825);
-  static const Color danger = Color(0xFFC62828);
-
-  TextStyle _txt({
-    double? size,
-    FontWeight? weight,
-    Color color = darkGreen,
-    double? height,
-    TextDecoration? deco,
-  }) =>
-      GoogleFonts.poppins(
-        fontSize: size,
-        fontWeight: weight,
-        color: color,
-        height: height,
-        decoration: deco,
-      );
-
   String? _selectedOpId;
+
+  double _scaleForWidth(double width) => (width / 375).clamp(0.85, 1.25);
 
   @override
   Widget build(BuildContext context) {
+    final themeScope = ThemeScope.of(context);
+    final cs = Theme.of(context).colorScheme;
+
     final ops = OperationHistory.instance.operations;
     final OperationRecord? selected = _selectedOpId == null
         ? (ops.isNotEmpty ? ops.first : null)
         : OperationHistory.instance.getById(_selectedOpId!);
     _selectedOpId ??= selected?.id;
 
+    TextStyle txt({
+      double? size,
+      FontWeight? w,
+      Color? c,
+      double? h,
+      TextDecoration? d,
+    }) =>
+        GoogleFonts.poppins(
+          fontSize: size,
+          fontWeight: w,
+          color: c ?? cs.onSurface,
+          height: h,
+          decoration: d,
+        );
+
     return Scaffold(
-      backgroundColor: bgGrey,
-      appBar: const PageHeader(),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            if (ops.isEmpty)
-              _EmptyState(
-                message:
-                    'No completed operations yet.\nRun one in Automation to build history.',
-                textStyle: _txt(size: 14, weight: FontWeight.w500, color: Colors.black87),
-              )
-            else ...[
-              // Picker
-              Card(
-                color: Colors.white,
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, size: 20, color: darkGreen),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedOpId!,
-                            isExpanded: true,
-                            iconEnabledColor: darkGreen,
-                            items: ops
-                                .map((op) => DropdownMenuItem(
-                                      value: op.id,
-                                      child: Text(
-                                        op.displayTitle,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: _txt(size: 14, weight: FontWeight.w600, color: Colors.black87),
-                                      ),
-                                    ))
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _selectedOpId = value);
-                              }
-                            },
+      appBar: PageHeader(
+        isDarkMode: themeScope.isDark,
+        onThemeChanged: themeScope.setDark,
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxW = constraints.maxWidth;
+            final isCompact = maxW < 420;
+            final isTablet = maxW >= 700;
+            final scale = _scaleForWidth(maxW);
+            final contentMaxWidth = isTablet ? 860.0 : 600.0;
+
+            final emptyH = (180 * scale).clamp(140, 220);
+
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (ops.isEmpty)
+                      _EmptyState(
+                        height: emptyH.toDouble(),
+                        message:
+                            'No completed operations yet.\nRun one in Automation to build history.',
+                        textStyle: txt(
+                          size: 14 * scale,
+                          w: FontWeight.w500,
+                          c: cs.onSurface.withOpacity(0.85),
+                        ),
+                      )
+                    else ...[
+                      // ───────── Operation picker ─────────
+                      Card(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: (12 * scale).clamp(10, 16),
+                            vertical: (10 * scale).clamp(8, 14),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.history,
+                                  size: (20 * scale).clamp(18, 24),
+                                  color: context.brand),
+                              SizedBox(width: (10 * scale).clamp(8, 14)),
+                              Expanded(
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedOpId ?? ops.first.id,
+                                    isExpanded: true,
+                                    iconEnabledColor: context.brand,
+                                    items: ops
+                                        .map(
+                                          (op) => DropdownMenuItem(
+                                            value: op.id,
+                                            child: Text(
+                                              op.displayTitle,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: txt(
+                                                size: (14 * scale).clamp(12, 18),
+                                                w: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() => _selectedOpId = value);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
 
-              const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-              // Quick stats row (tiles like Home/Automation)
-              if (selected != null && selected.readings.isNotEmpty)
-                Card(
-                  color: Colors.white,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: _StatsRow(selected: selected, txt: _txt),
-                  ),
-                ),
+                      // ───────── Stats tiles ─────────
+                      if (selected != null && selected.readings.isNotEmpty)
+                        Card(
+                          child: Padding(
+                            padding: EdgeInsets.all((16 * scale).clamp(12, 22)),
+                            child: _StatsRow(
+                              selected: selected,
+                              scale: scale,
+                            ),
+                          ),
+                        ),
 
-              const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-              // Chart
-              _SectionCard(
-                title: 'Moisture Content',
-                titleStyle: _txt(size: 16, weight: FontWeight.w700, color: darkGreen),
-                child: (selected == null || selected.readings.length < 2)
-                    ? _EmptyState(
-                        message: 'Not enough data points.',
-                        textStyle: _txt(size: 14, weight: FontWeight.w500, color: Colors.black87),
-                      )
-                    : _MoistureChart(
-                        readings: selected.readings,
-                        txt: _txt,
-                        lineColor: darkGreen,
-                        areaColor: darkGreen.withOpacity(0.20),
-                        gridColor: const Color(0xFF000000).withOpacity(0.06),
-                        borderColor: const Color(0xFF000000).withOpacity(0.10),
+                      // ───────── Chart ─────────
+                      _SectionCard(
+                        title: 'Moisture Content',
+                        titleStyle: txt(
+                          size: (16 * scale).clamp(14, 20),
+                          w: FontWeight.w700,
+                          c: context.brand,
+                        ),
+                        child: (selected == null ||
+                                selected.readings.length < 2)
+                            ? _EmptyState(
+                                height: emptyH * 0.7,
+                                message: 'Not enough data points.',
+                                textStyle: txt(
+                                  size: (14 * scale).clamp(12, 18),
+                                  w: FontWeight.w500,
+                                  c: cs.onSurface.withOpacity(0.85),
+                                ),
+                              )
+                            : _MoistureChart(
+                                readings: selected.readings,
+                                height: (isTablet ? 320.0 : 260.0) *
+                                    (scale.clamp(0.9, 1.1)),
+                                scale: scale,
+                              ),
                       ),
-              ),
 
-              const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-              // Info footer
-              if (selected != null)
-                _InfoFooter(
-                  op: selected,
-                  txt: _txt,
+                      // ───────── Info footer ─────────
+                      if (selected != null) _InfoFooter(op: selected),
+
+                      const SizedBox(height: 12),
+
+                      // ───────── Interpretation ─────────
+                      _InterpretationCard(
+                        op: selected,
+                        titleSize: (16 * scale).clamp(14, 20),
+                        bulletGap: (4 * scale).clamp(3, 8),
+                      ),
+                    ],
+                  ],
                 ),
-
-              const SizedBox(height: 12),
-
-              // Interpretation card with colored headline icon
-              _InterpretationCard(
-                op: selected,
-                txt: _txt,
-                ok: darkGreen,
-                warn: amber,
-                danger: danger,
               ),
-            ],
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// ------------ UI Parts ------------
+/// ------------ UI helpers ------------
 class _SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
@@ -249,9 +287,6 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
@@ -270,18 +305,19 @@ class _SectionCard extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final String message;
   final TextStyle textStyle;
-  const _EmptyState({required this.message, required this.textStyle});
+  final double? height;
+  const _EmptyState({
+    required this.message,
+    required this.textStyle,
+    this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 180,
+      height: height ?? 180,
       child: Center(
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: textStyle,
-        ),
+        child: Text(message, textAlign: TextAlign.center, style: textStyle),
       ),
     );
   }
@@ -289,61 +325,73 @@ class _EmptyState extends StatelessWidget {
 
 class _StatsRow extends StatelessWidget {
   final OperationRecord selected;
-  final TextStyle Function({
-    double? size,
-    FontWeight? weight,
-    Color color,
-    double? height,
-    TextDecoration? deco,
-  }) txt;
+  final double scale;
 
-  static const Color bgGrey = Color(0xFFF5F5F5);
-  static const Color border = Color(0xFF7C7C7C);
-  static const Color darkGreen = Color(0xFF2F6F4F);
-
-  const _StatsRow({required this.selected, required this.txt});
+  const _StatsRow({
+    required this.selected,
+    required this.scale,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    TextStyle t({double? size, FontWeight? w}) => GoogleFonts.poppins(
+          fontSize: size,
+          fontWeight: w,
+          color: cs.onSurface,
+        );
+
     final vals = selected.readings.map((e) => e.value).toList();
     final avg = vals.reduce((a, b) => a + b) / vals.length;
     final minV = vals.reduce((a, b) => a < b ? a : b);
     final maxV = vals.reduce((a, b) => a > b ? a : b);
 
     Widget tile(String label, String value, IconData icon) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: bgGrey,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: darkGreen, size: 18),
-              const SizedBox(height: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(value, style: txt(size: 24, weight: FontWeight.w800, color: Colors.black87)),
-              ),
-              const SizedBox(height: 2),
-              Text(label, style: txt(size: 13, weight: FontWeight.w600)),
-            ],
-          ),
+      return Container(
+        padding: EdgeInsets.all((14 * scale).clamp(10, 18)),
+        decoration: BoxDecoration(
+          color: cs.surfaceVariant,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outline),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: cs.primary, size: (18 * scale).clamp(16, 22)),
+            SizedBox(height: (6 * scale).clamp(4, 10)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child:
+                  Text(value, style: t(size: (24 * scale).clamp(20, 30), w: FontWeight.w800)),
+            ),
+            SizedBox(height: (2 * scale).clamp(2, 6)),
+            Text(label, style: t(size: (13 * scale).clamp(11, 16), w: FontWeight.w600)),
+          ],
+        ),
+      );
+    }
+
+    if (MediaQuery.of(context).size.width < 420) {
+      return Column(
+        children: [
+          tile("Average", "${avg.toStringAsFixed(1)}%", Icons.timeline_outlined),
+          const SizedBox(height: 12),
+          tile("Min", "${minV.toStringAsFixed(1)}%", Icons.trending_down_outlined),
+          const SizedBox(height: 12),
+          tile("Max", "${maxV.toStringAsFixed(1)}%", Icons.trending_up_outlined),
+        ],
       );
     }
 
     return Row(
       children: [
-        tile("Average", "${avg.toStringAsFixed(1)}%", Icons.timeline_outlined),
+        Expanded(child: tile("Average", "${avg.toStringAsFixed(1)}%", Icons.timeline_outlined)),
         const SizedBox(width: 12),
-        tile("Min", "${minV.toStringAsFixed(1)}%", Icons.trending_down_outlined),
+        Expanded(child: tile("Min", "${minV.toStringAsFixed(1)}%", Icons.trending_down_outlined)),
         const SizedBox(width: 12),
-        tile("Max", "${maxV.toStringAsFixed(1)}%", Icons.trending_up_outlined),
+        Expanded(child: tile("Max", "${maxV.toStringAsFixed(1)}%", Icons.trending_up_outlined)),
       ],
     );
   }
@@ -351,29 +399,19 @@ class _StatsRow extends StatelessWidget {
 
 class _MoistureChart extends StatelessWidget {
   final List<MoistureReading> readings;
-  final TextStyle Function({
-    double? size,
-    FontWeight? weight,
-    Color color,
-    double? height,
-    TextDecoration? deco,
-  }) txt;
-  final Color lineColor;
-  final Color areaColor;
-  final Color gridColor;
-  final Color borderColor;
+  final double? height;
+  final double scale;
 
   const _MoistureChart({
     required this.readings,
-    required this.txt,
-    required this.lineColor,
-    required this.areaColor,
-    required this.gridColor,
-    required this.borderColor,
+    this.height,
+    this.scale = 1.0,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     final first = readings.first.t;
     final spots = readings
         .map((r) => FlSpot(r.t.difference(first).inSeconds.toDouble(), r.value))
@@ -388,8 +426,17 @@ class _MoistureChart extends StatelessWidget {
     String xLabel(double x) =>
         DateFormat('HH:mm').format(first.add(Duration(seconds: x.round())));
 
+    final lineColor = cs.primary;
+    final areaColor = cs.primary.withOpacity(0.20);
+    final gridColor = cs.onSurface.withOpacity(0.10);
+    final borderColor = cs.outline.withOpacity(0.55);
+    final labelColor = cs.onSurface.withOpacity(0.70);
+
+    TextStyle t(double sz, [FontWeight? w]) =>
+        GoogleFonts.poppins(fontSize: sz, fontWeight: w, color: labelColor);
+
     return SizedBox(
-      height: 260,
+      height: height ?? 260,
       child: LineChart(
         LineChartData(
           minX: xMin,
@@ -408,21 +455,21 @@ class _MoistureChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 28,
+                reservedSize: (28 * scale).clamp(24, 36),
                 interval: (xMax - xMin) / 4.0,
                 getTitlesWidget: (v, m) => Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(xLabel(v), style: txt(size: 11, weight: FontWeight.w500, color: Colors.black54)),
+                  child: Text(xLabel(v), style: t((11 * scale).clamp(10, 14))),
                 ),
               ),
             ),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 36,
+                reservedSize: (36 * scale).clamp(28, 44),
                 interval: ((yMax - yMin) / 5).clamp(1, 100).toDouble(),
                 getTitlesWidget: (v, m) =>
-                    Text(v.toStringAsFixed(0), style: txt(size: 11, weight: FontWeight.w500, color: Colors.black54)),
+                    Text(v.toStringAsFixed(0), style: t((11 * scale).clamp(10, 14))),
               ),
             ),
           ),
@@ -434,7 +481,7 @@ class _MoistureChart extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               isCurved: true,
-              barWidth: 3,
+              barWidth: (3 * scale).clamp(2, 4),
               color: lineColor,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(show: true, color: areaColor),
@@ -448,40 +495,34 @@ class _MoistureChart extends StatelessWidget {
 
 class _InfoFooter extends StatelessWidget {
   final OperationRecord op;
-  final TextStyle Function({
-    double? size,
-    FontWeight? weight,
-    Color color,
-    double? height,
-    TextDecoration? deco,
-  }) txt;
-
-  const _InfoFooter({required this.op, required this.txt});
+  const _InfoFooter({required this.op});
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final df = DateFormat('MMM d, HH:mm:ss');
     final start = df.format(op.startedAt);
     final end = op.endedAt == null ? '—' : df.format(op.endedAt!);
     final points = op.readings.length;
 
     return Card(
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        padding: const EdgeInsets.all(12),
         child: Text(
           'Started: $start • Ended: $end • Points: $points',
           textAlign: TextAlign.center,
-          style: txt(size: 12, weight: FontWeight.w500, color: Colors.black87),
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: cs.onSurface.withOpacity(0.85),
+          ),
         ),
       ),
     );
   }
 }
 
-/// ------------ Interpretation (farmer-friendly) ------------
+/// ------------ Interpretation ------------
 enum _MoistureStatus { tooDry, ok, tooWet }
 
 class _AnalysisResult {
@@ -499,81 +540,72 @@ class _AnalysisResult {
 
 class _InterpretationCard extends StatelessWidget {
   final OperationRecord? op;
-  final TextStyle Function({
-    double? size,
-    FontWeight? weight,
-    Color color,
-    double? height,
-    TextDecoration? deco,
-  }) txt;
-  final Color ok;
-  final Color warn;
-  final Color danger;
+  final double titleSize;
+  final EdgeInsets? padding;
+  final double bulletGap;
 
   const _InterpretationCard({
     required this.op,
-    required this.txt,
-    required this.ok,
-    required this.warn,
-    required this.danger,
+    required this.titleSize,
+    this.padding,
+    this.bulletGap = 4,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    TextStyle t(double sz, {FontWeight? w, Color? c}) =>
+        GoogleFonts.poppins(fontSize: sz, fontWeight: w, color: c ?? cs.onSurface);
+
     if (op == null || op!.readings.isEmpty) {
       return _SectionCard(
         title: 'Interpretation',
-        titleStyle: txt(size: 16, weight: FontWeight.w700),
+        titleStyle: t(titleSize, w: FontWeight.w700),
         child: _EmptyState(
           message: 'No data to interpret.',
-          textStyle: txt(size: 14, weight: FontWeight.w500, color: Colors.black87),
+          textStyle: t(14, w: FontWeight.w500, c: cs.onSurface.withOpacity(0.85)),
         ),
       );
     }
 
     final analysis = _analyzeOperation(op!);
-    final color = switch (analysis.status) {
-      _MoistureStatus.tooDry => warn,
-      _MoistureStatus.ok => ok,
-      _MoistureStatus.tooWet => danger,
+    final statusColor = switch (analysis.status) {
+      _MoistureStatus.tooDry => Colors.amber,
+      _MoistureStatus.ok => context.brand,
+      _MoistureStatus.tooWet => Colors.red,
     };
 
     return _SectionCard(
       title: 'Interpretation',
-      titleStyle: txt(size: 16, weight: FontWeight.w700),
+      titleStyle: t(titleSize, w: FontWeight.w700),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.agriculture_rounded, color: color),
+              Icon(Icons.agriculture_rounded, color: statusColor),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  analysis.headline,
-                  style: txt(size: 14, weight: FontWeight.w700, color: Colors.black87),
-                ),
+                child: Text(analysis.headline, style: t(14, w: FontWeight.w700)),
               ),
             ],
           ),
           const SizedBox(height: 8),
           ...analysis.points.map(
             (p) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: EdgeInsets.only(bottom: bulletGap),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('•  '),
-                  Expanded(child: Text(p, style: txt(size: 13, weight: FontWeight.w500, color: Colors.black87))),
+                  const Text('• '),
+                  Expanded(child: Text(p, style: t(13, w: FontWeight.w500))),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            analysis.recommendation,
-            style: txt(size: 13, weight: FontWeight.w700, color: Colors.black87),
-          ),
+          Text(analysis.recommendation, style: t(13, w: FontWeight.w700)),
         ],
       ),
     );
@@ -591,13 +623,16 @@ _AnalysisResult _analyzeOperation(OperationRecord op) {
   final last = values.last;
   final delta = last - first;
 
+  // Trend summary
   final trend = delta.abs() < 1.0 ? 'stable' : (delta > 0 ? 'rising' : 'falling');
 
+  // Duration summary
   final dur = op.duration;
   final durText = (dur == null)
       ? '—'
       : '${dur.inMinutes.remainder(60).toString().padLeft(2, '0')}:${dur.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
+  // Target range (same as Home/Automation)
   const low = 12.0;
   const high = 18.0;
 
@@ -614,7 +649,7 @@ _AnalysisResult _analyzeOperation(OperationRecord op) {
   final points = <String>[
     'Average moisture: ${avg.toStringAsFixed(1)}%',
     'Range: ${minV.toStringAsFixed(1)}% – ${maxV.toStringAsFixed(1)}%',
-    'Trend: $trend (Δ ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%)',
+    'Change Rate: $trend (Δ ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%)',
     'Duration: $durText',
     'Samples: $n',
   ];

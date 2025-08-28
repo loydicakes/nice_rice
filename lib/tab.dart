@@ -1,15 +1,18 @@
-// lib/tab.dart
-import 'dart:ui'; // for ImageFilter.blur
+import 'dart:ui'; // ImageFilter.blur
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// Your pages
-import 'pages/homepage/home_page.dart';
-import 'pages/automation/automation.dart';
-import 'pages/analytics/analytics.dart';
+// Pages
+import 'package:nice_rice/pages/homepage/home_page.dart';
+import 'package:nice_rice/pages/automation/automation.dart';
+import 'package:nice_rice/pages/analytics/analytics.dart';
+
+// Theme helpers
+import 'package:nice_rice/theme_controller.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppShell extends StatefulWidget {
-  /// Which tab to open first (0 = Home, 1 = Automation, 2 = Analytics if available)
+  /// 0 = Home, 1 = Automation, 2 = Analytics (if signed-in)
   final int initialIndex;
   const AppShell({super.key, this.initialIndex = 0});
 
@@ -34,7 +37,7 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _index = widget.initialIndex;
-    _controller = PageController(initialPage: 0);
+    _controller = PageController(initialPage: _index);
     _authStream = FirebaseAuth.instance.authStateChanges();
     _user = FirebaseAuth.instance.currentUser;
   }
@@ -47,24 +50,9 @@ class _AppShellState extends State<AppShell> {
 
   bool get _signedIn => _user != null;
 
-  /// Current pages and destinations depend on auth state
   List<Widget> get _pages => _signedIn
       ? const [HomePage(), AutomationPage(), AnalyticsPage()]
       : const [HomePage(), AutomationPage()];
-
-  List<NavigationDestination> get _destinations => const [
-        NavigationDestination(
-          icon: Icon(Icons.home_rounded, color: Color.fromARGB(80, 0, 0, 0)),
-          selectedIcon: Icon(Icons.home_rounded, color: Color.fromARGB(255, 45, 79, 43)),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(80, 0, 0, 0)),
-          selectedIcon: Icon(Icons.auto_awesome_rounded, color: Color.fromARGB(255, 45, 79, 43)),
-          label: 'Automation',
-        ),
-        // The 3rd destination (Analytics) is only used/shown when signed in (see build)
-      ];
 
   /// Clamp index to available tabs
   int _clampIndex(int i) {
@@ -94,10 +82,15 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final view = MediaQuery.of(context);
+    final cs = Theme.of(context).colorScheme;
     final safeBottom = view.padding.bottom;
 
     // Reserve space so content never sits under the floating pill
     final reservedBottomSpace = _pillHeight + _pillBottomGap + safeBottom + 8;
+
+    // Colors for nav icons/labels
+    final selectedColor = context.brand;
+    final unselectedColor = cs.onSurface.withOpacity(0.55);
 
     return StreamBuilder<User?>(
       stream: _authStream,
@@ -105,19 +98,19 @@ class _AppShellState extends State<AppShell> {
       builder: (context, snap) {
         _user = snap.data;
 
-        // If state changed (e.g., logout removed Analytics), make sure index is valid.
+        // Sync PageController if tab count changes due to auth switch
         if (_index >= _pages.length) {
-          // Coerce index and jump without animation to avoid flicker.
-          WidgetsBinding.instance.addPostFrameCallback((_) => _jumpTo(_pages.length - 1));
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _jumpTo(_pages.length - 1));
         } else if (_controller.positions.isNotEmpty &&
             _controller.page != _index.toDouble()) {
-          // Keep PageController in sync when auth state flips.
-          WidgetsBinding.instance.addPostFrameCallback((_) => _jumpTo(_index));
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _jumpTo(_index));
         }
 
         return Scaffold(
           extendBody: true,
-          backgroundColor: const Color(0xFFF5F5F5),
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: Stack(
             children: [
               // PAGES
@@ -131,7 +124,7 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
 
-              // FLOATING PILL NAV (transparent/glassy)
+              // FLOATING PILL NAV (glass + theme-aware)
               Positioned(
                 left: _pillHorizontalMargin,
                 right: _pillHorizontalMargin,
@@ -140,9 +133,9 @@ class _AppShellState extends State<AppShell> {
                   height: _pillHeight,
                   index: _index,
                   onSelect: _onTapTab,
-                  // pass whether Analytics is visible
                   showAnalytics: _signedIn,
-                  destinations: _destinations,
+                  selectedColor: selectedColor,
+                  unselectedColor: unselectedColor,
                 ),
               ),
             ],
@@ -159,25 +152,38 @@ class _FloatingPillNav extends StatelessWidget {
     required this.index,
     required this.onSelect,
     required this.showAnalytics,
-    required this.destinations,
+    required this.selectedColor,
+    required this.unselectedColor,
   });
 
   final double height;
   final int index;
   final bool showAnalytics;
   final ValueChanged<int> onSelect;
-  final List<NavigationDestination> destinations;
+  final Color selectedColor;
+  final Color unselectedColor;
 
   @override
   Widget build(BuildContext context) {
-    // Build destination list conditionally
+    final cs = Theme.of(context).colorScheme;
+
     final items = <NavigationDestination>[
-      destinations[0],
-      destinations[1],
+      NavigationDestination(
+        icon: Icon(Icons.home_rounded, color: unselectedColor),
+        selectedIcon: Icon(Icons.home_rounded, color: selectedColor),
+        label: 'Home',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.auto_awesome_rounded, color: unselectedColor),
+        selectedIcon:
+            Icon(Icons.auto_awesome_rounded, color: selectedColor),
+        label: 'Automation',
+      ),
       if (showAnalytics)
-        const NavigationDestination(
-          icon: Icon(Icons.analytics_rounded, color: Color.fromARGB(80, 0, 0, 0)),
-          selectedIcon: Icon(Icons.analytics_rounded, color: Color.fromARGB(255, 45, 79, 43)),
+        NavigationDestination(
+          icon: Icon(Icons.analytics_rounded, color: unselectedColor),
+          selectedIcon:
+              Icon(Icons.analytics_rounded, color: selectedColor),
           label: 'Analytics',
         ),
     ];
@@ -194,13 +200,13 @@ class _FloatingPillNav extends StatelessWidget {
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(height: height),
             ),
-            // Semi-transparent background with a faint border and shadow
+            // Theme-aware translucent background + subtle border/shadow
             Container(
               height: height,
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
+                color: cs.surfaceVariant, // adapts to dark/light
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.35)),
+                border: Border.all(color: cs.outline.withOpacity(0.35)),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x22000000),
@@ -212,12 +218,28 @@ class _FloatingPillNav extends StatelessWidget {
               ),
               child: Theme(
                 data: Theme.of(context).copyWith(
-                  visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
-                  navigationBarTheme: const NavigationBarThemeData(
-                    height: 60,
-                    surfaceTintColor: Colors.transparent,
-                    indicatorColor: Colors.transparent,
+                  navigationBarTheme: NavigationBarThemeData(
+                    height: height,
                     backgroundColor: Colors.transparent,
+                    indicatorColor: Colors.transparent,
+                    surfaceTintColor: Colors.transparent,
+                    iconTheme: MaterialStateProperty.resolveWith((states) {
+                      if (states.contains(MaterialState.selected)) {
+                        return IconThemeData(color: selectedColor);
+                      }
+                      return IconThemeData(color: unselectedColor);
+                    }),
+                    labelTextStyle:
+                        MaterialStateProperty.resolveWith((states) {
+                      final color = states.contains(MaterialState.selected)
+                          ? selectedColor
+                          : unselectedColor;
+                      return GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      );
+                    }),
                   ),
                 ),
                 child: NavigationBar(
@@ -226,7 +248,8 @@ class _FloatingPillNav extends StatelessWidget {
                   indicatorColor: Colors.transparent,
                   selectedIndex: index.clamp(0, items.length - 1),
                   onDestinationSelected: onSelect,
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  labelBehavior:
+                      NavigationDestinationLabelBehavior.alwaysShow,
                   destinations: items,
                 ),
               ),

@@ -1,10 +1,13 @@
-// lib/header.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-// ✅ Auth & profile data
+
+// Auth & profile
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Theme helpers (context.brand, etc.)
+import 'package:nice_rice/theme_controller.dart';
 
 class PageHeader extends StatefulWidget implements PreferredSizeWidget {
   const PageHeader({
@@ -14,7 +17,7 @@ class PageHeader extends StatefulWidget implements PreferredSizeWidget {
     this.profileIconSize = 18,
     this.toolbarTopPadding = 30,
 
-    /// Optional theming hooks (safe defaults)
+    /// Dark mode toggle (provided by caller)
     this.isDarkMode = false,
     this.onThemeChanged,
   });
@@ -24,22 +27,17 @@ class PageHeader extends StatefulWidget implements PreferredSizeWidget {
   final double profileIconSize;
   final double toolbarTopPadding;
 
-  /// Optional (for the Dark mode toggle)
   final bool isDarkMode;
   final ValueChanged<bool>? onThemeChanged;
 
   @override
   State<PageHeader> createState() => _PageHeaderState();
 
-  /// Dynamically adjust header height with the top padding
   @override
   Size get preferredSize => Size.fromHeight(kToolbarHeight + toolbarTopPadding);
 }
 
 class _PageHeaderState extends State<PageHeader> {
-  static const bgGrey = Color(0xFFF5F5F5);
-  static const darkGreen = Color(0xFF2F6F4F);
-
   final LayerLink _profileLink = LayerLink();
   OverlayEntry? _profilePopup;
 
@@ -55,7 +53,6 @@ class _PageHeaderState extends State<PageHeader> {
       final data = doc.data();
       final first = (data?['firstName'] as String?)?.trim();
       if (first != null && first.isNotEmpty) return first;
-      // fallbacks
       if (u.displayName != null && u.displayName!.trim().isNotEmpty) {
         return u.displayName!.split(' ').first;
       }
@@ -69,65 +66,62 @@ class _PageHeaderState extends State<PageHeader> {
   }
 
   void _openProfilePopup() {
-  if (_profilePopup != null) return;
-  final overlay = Overlay.of(context);
+    if (_profilePopup != null) return;
+    final overlay = Overlay.of(context);
 
-  _profilePopup = OverlayEntry(
-    builder: (_) {
-      final mq = MediaQuery.of(context);
-      final safeTop = mq.padding.top;
-      final screenW = mq.size.width;
-      final screenH = mq.size.height;
+    _profilePopup = OverlayEntry(
+      builder: (_) {
+        final mq = MediaQuery.of(context);
+        final safeTop = mq.padding.top;
+        final screenW = mq.size.width;
+        final screenH = mq.size.height;
 
-      // Space below the header where we can show the panel
-      final topOffset = widget.preferredSize.height + safeTop + 8;
+        final topOffset = widget.preferredSize.height + safeTop + 8;
 
-      // Panel constraints
-      final panelWidth = screenW - 24;          // 12px margin on each side
-      final clampedWidth = panelWidth.clamp(220.0, 280.0);
-      final availableHeight = screenH - topOffset - 12.0; // keep 12px bottom gap
+        // Panel constraints
+        final panelWidth = screenW - 24; // 12px margin on each side
+        final clampedWidth = panelWidth.clamp(220.0, 280.0);
+        final availableHeight = screenH - topOffset - 12.0;
 
-      return Stack(
-        children: [
-          // Tap outside to close
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _toggleProfilePopup,
-              behavior: HitTestBehavior.opaque,
-            ),
-          ),
-
-          // Panel anchored to top-right, width/height constrained
-          Positioned(
-            right: 12,
-            top: topOffset,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: clampedWidth,
-                // Height is limited to available space; inner content scrolls if needed
-                maxHeight: availableHeight > 200 ? availableHeight : 200,
-                minWidth: 220,
-                minHeight: 0,
+        return Stack(
+          children: [
+            // Tap outside to close
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _toggleProfilePopup,
+                behavior: HitTestBehavior.opaque,
               ),
-              child: Material(
-                color: Colors.transparent,
-                elevation: 8,
-                borderRadius: BorderRadius.circular(16),
-                child: _ProfilePanel(
-                  onClose: _toggleProfilePopup,
-                  isDarkMode: widget.isDarkMode,
-                  onThemeChanged: widget.onThemeChanged,
+            ),
+
+            // Panel anchored to top-right, width/height constrained
+            Positioned(
+              right: 12,
+              top: topOffset,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: clampedWidth,
+                  maxHeight: availableHeight > 200 ? availableHeight : 200,
+                  minWidth: 220,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(16),
+                  child: _ProfilePanel(
+                    onClose: _toggleProfilePopup,
+                    isDarkMode: widget.isDarkMode,
+                    onThemeChanged: widget.onThemeChanged,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      );
-    },
-  );
+          ],
+        );
+      },
+    );
 
-  overlay.insert(_profilePopup!);
-}
+    overlay.insert(_profilePopup!);
+  }
 
   void _closeProfilePopup() {
     _profilePopup?.remove();
@@ -150,14 +144,23 @@ class _PageHeaderState extends State<PageHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final brightness = theme.brightness;
+
     return AppBar(
-      backgroundColor: bgGrey,
+      backgroundColor:
+          theme.appBarTheme.backgroundColor ?? theme.scaffoldBackgroundColor,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       toolbarHeight: widget.preferredSize.height,
-      systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: bgGrey,
+      systemOverlayStyle: (brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark)
+          .copyWith(
+        statusBarColor:
+            theme.appBarTheme.backgroundColor ?? theme.scaffoldBackgroundColor,
       ),
       titleSpacing: 0,
       title: Padding(
@@ -183,7 +186,7 @@ class _PageHeaderState extends State<PageHeader> {
               style: GoogleFonts.poppins(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: darkGreen,
+                color: context.brand, // brand color adapts to theme
                 height: 1.0,
               ),
             ),
@@ -204,7 +207,6 @@ class _PageHeaderState extends State<PageHeader> {
               child: FutureBuilder<String?>(
                 future: _fetchFirstName(),
                 builder: (context, snap) {
-                  // Show user photo if signed-in, else generic icon
                   final signedIn = _user != null;
                   final photo = _user?.photoURL;
                   return Container(
@@ -212,15 +214,18 @@ class _PageHeaderState extends State<PageHeader> {
                     height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: darkGreen, width: 2),
+                      border: Border.all(color: context.brand, width: 2),
                       image: signedIn && photo != null
-                          ? DecorationImage(image: NetworkImage(photo), fit: BoxFit.cover)
+                          ? DecorationImage(
+                              image: NetworkImage(photo), fit: BoxFit.cover)
                           : null,
                     ),
                     alignment: Alignment.center,
                     child: signedIn && photo != null
                         ? null
-                        : Icon(Icons.person, color: darkGreen, size: widget.profileIconSize),
+                        : Icon(Icons.person,
+                            color: context.brand,
+                            size: widget.profileIconSize),
                   );
                 },
               ),
@@ -250,9 +255,6 @@ class _ProfilePanel extends StatefulWidget {
 }
 
 class _ProfilePanelState extends State<_ProfilePanel> {
-  static const bgGrey = Color(0xFFF5F5F5);
-  static const darkGreen = Color(0xFF2F6F4F);
-
   User? get _user => FirebaseAuth.instance.currentUser;
 
   Future<String> _displayName() async {
@@ -283,27 +285,33 @@ class _ProfilePanelState extends State<_ProfilePanel> {
 
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
-    // After logout, send back to landing
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/landing', (r) => false);
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil('/landing', (r) => false);
     }
   }
 
-  // Stubs for edit actions (only for signed-in)
   void _editPhoto() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit photo (signed-in only) – TODO: implement picker')),
+      const SnackBar(
+          content: Text(
+              'Edit photo (signed-in only) – TODO: implement picker')),
     );
   }
 
   void _editName() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit name (signed-in only) – TODO: implement form')),
+      const SnackBar(
+          content: Text(
+              'Edit name (signed-in only) – TODO: implement form')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     final signedIn = _user != null;
     final photo = _user?.photoURL;
 
@@ -315,7 +323,7 @@ class _ProfilePanelState extends State<_ProfilePanel> {
         width: 260,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: bgGrey,
+          color: cs.surface, // theme-aware panel bg
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
@@ -338,16 +346,17 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                     height: 46,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white,
+                      color: theme.cardColor,
                       image: signedIn && photo != null
-                          ? DecorationImage(image: NetworkImage(photo), fit: BoxFit.cover)
+                          ? DecorationImage(
+                              image: NetworkImage(photo), fit: BoxFit.cover)
                           : null,
-                      border: Border.all(color: darkGreen, width: 2),
+                      border: Border.all(color: context.brand, width: 2),
                     ),
                     alignment: Alignment.center,
                     child: signedIn && photo != null
                         ? null
-                        : Icon(Icons.person, color: darkGreen, size: 22),
+                        : Icon(Icons.person, color: context.brand, size: 22),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -355,7 +364,8 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                   child: FutureBuilder<String>(
                     future: _displayName(),
                     builder: (context, snap) {
-                      final text = snap.data ?? (signedIn ? "Hello!" : "Hello, Farmer!");
+                      final text = snap.data ??
+                          (signedIn ? "Hello!" : "Hello, Farmer!");
                       return Text(
                         text,
                         maxLines: 1,
@@ -363,7 +373,7 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: darkGreen,
+                          color: context.brand,
                         ),
                       );
                     },
@@ -371,29 +381,35 @@ class _ProfilePanelState extends State<_ProfilePanel> {
                 ),
                 IconButton(
                   onPressed: widget.onClose,
-                  icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+                  icon: Icon(Icons.close, size: 20, color: cs.onSurface),
                   tooltip: 'Close',
                 ),
               ],
             ),
 
             const SizedBox(height: 8),
-            const Divider(height: 1),
+            Divider(height: 1, color: cs.outline.withOpacity(.4)),
 
             // Signed-in actions
             if (signedIn) ...[
               ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.edit, color: Colors.black87),
-                title: Text("Edit name", style: GoogleFonts.poppins(fontSize: 13)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                leading: Icon(Icons.edit, color: cs.onSurface),
+                title: Text("Edit name",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: cs.onSurface)),
                 onTap: _editName,
               ),
               ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.image_outlined, color: Colors.black87),
-                title: Text("Edit photo", style: GoogleFonts.poppins(fontSize: 13)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                leading: Icon(Icons.image_outlined, color: cs.onSurface),
+                title: Text("Edit photo",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: cs.onSurface)),
                 onTap: _editPhoto,
               ),
             ],
@@ -402,48 +418,61 @@ class _ProfilePanelState extends State<_ProfilePanel> {
             if (!signedIn) ...[
               ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.app_registration, color: Colors.black87),
-                title: Text("Register here", style: GoogleFonts.poppins(fontSize: 13)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                leading:
+                    Icon(Icons.app_registration, color: cs.onSurface),
+                title: Text("Register here",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: cs.onSurface)),
                 onTap: _goLogin,
               ),
               ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.login, color: Colors.black87),
-                title: Text("Sign in for free", style: GoogleFonts.poppins(fontSize: 13)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                leading: Icon(Icons.login, color: cs.onSurface),
+                title: Text("Sign in for free",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: cs.onSurface)),
                 onTap: _goLogin,
               ),
             ],
 
-            // Dark mode toggle (works if you pass onThemeChanged)
+            // Dark mode toggle
             SwitchListTile(
               dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              title: Text("Dark mode", style: GoogleFonts.poppins(fontSize: 13)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8),
+              title: Text("Dark mode",
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: cs.onSurface)),
               value: widget.isDarkMode,
               onChanged: (v) {
                 if (widget.onThemeChanged != null) {
                   widget.onThemeChanged!(v);
                 } else {
-                  // Safe fallback if not wired yet
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Provide onThemeChanged to apply dark mode')),
+                    const SnackBar(
+                        content: Text(
+                            'Provide onThemeChanged to apply dark mode')),
                   );
                 }
-                setState(() {}); // just to rebuild the switch immediately
+                setState(() {}); // rebuild the switch state
               },
             ),
 
-            const Divider(height: 1),
+            Divider(height: 1, color: cs.outline.withOpacity(.4)),
 
-            // Logout (only if signed-in)
             if (signedIn)
               ListTile(
                 dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.logout, color: Colors.black87),
-                title: Text("Log out", style: GoogleFonts.poppins(fontSize: 13)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                leading: Icon(Icons.logout, color: cs.onSurface),
+                title: Text("Log out",
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: cs.onSurface)),
                 onTap: _logout,
               ),
           ],

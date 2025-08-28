@@ -5,100 +5,81 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'firebase_options.dart';
 
-// Screens you already have
+// Screens
 import 'pages/landingpage/landing_page.dart';
 import 'pages/login/login.dart';
 import 'pages/landingpage/splash_screen.dart';
-import 'pages/homepage/home_page.dart';
 import 'tab.dart'; // AppShell
 import 'header.dart';
+import 'package:nice_rice/pages/homepage/home_page.dart';
+
+
+// Theme controller
+import 'theme_controller.dart';
+
+final ThemeController _theme = ThemeController();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const BootstrapApp()); // show something instantly
-  _init(); // do the heavy work in the background
+  runApp(
+    ThemeScope(
+      controller: _theme,
+      child: const BootstrapApp(),
+    ),
+  );
+  _init();
 }
 
 Future<void> _init() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
-/// NOTE: MyApp is unused because you boot BootstrapApp above.
-// You can delete MyApp if you want only one MaterialApp.
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nice Rice',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF5F5F5)),
-        useMaterial3: true,
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          },
-        ),
-      ),
-
-      initialRoute: '/splash',
-      routes: {
-        '/splash': (_) => const SplashScreen(),
-        '/landing': (_) => const LandingPage(),
-        '/login': (_) => const LoginPage(),
-
-        // Build AppShell with optional initialIndex
-        '/main': (ctx) {
-          final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
-          return AppShell(initialIndex: initial ?? 0); // default to Home tab
-        },
-
-        // optional: direct route to Home (not used in this flow)
-        '/home': (_) => const HomePage(),
-      },
-    );
-  }
-}
-
-/// This is the app you actually launch in main().
+/// Single app entry that owns MaterialApp + theming.
 class BootstrapApp extends StatelessWidget {
   const BootstrapApp({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: const SplashScreen(),
-      routes: {
-        '/landing': (_) => const LandingPage(),
-        '/login': (_) => const LoginPage(),
-
-        // Build AppShell with optional initialIndex here too
-        '/main': (ctx) {
-          final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
-          return AppShell(initialIndex: initial ?? 0);
-        },
+    final theme = ThemeScope.of(context);
+    return AnimatedBuilder(
+      animation: theme,
+      builder: (_, __) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: AppThemes.light(),
+          darkTheme: AppThemes.dark(),
+          themeMode: theme.mode,
+          // Page transitions belong in ThemeData (already set in AppThemes)
+          home: const SplashScreen(),
+          routes: {
+            '/landing': (_) => const LandingPage(),
+            '/login': (_) => const LoginPage(),
+            '/main': (ctx) {
+              final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
+              return AppShell(initialIndex: initial ?? 0);
+            },
+            // optional direct route
+            '/home': (_) => HomePage(),
+          },
+        );
       },
     );
   }
 }
 
-/// Top-level scaffold that hosts the fixed header (like tab.dart hosts tabs).
-/// Ensure `AppShell` does NOT set an AppBar to avoid double headers.
+/// Optional scaffold that always includes the header.
+/// Ensure AppShell doesn’t add its own AppBar to avoid duplicates.
 class AppWithHeader extends StatelessWidget {
   const AppWithHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final theme = ThemeScope.of(context);
     return Scaffold(
-      appBar: const PageHeader(), // <- from pages/header/header.dart
-      // If AppShell uses its own Scaffold for bottom nav, that's fine.
-      // Just keep AppShell.appBar == null.
+      appBar: PageHeader(
+        isDarkMode: theme.isDark,
+        onThemeChanged: theme.setDark,
+      ),
       body: const AppShell(),
     );
   }
