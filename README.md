@@ -1,4 +1,4 @@
-# nice_rice_fixed
+# nice_rice
 
 A new Flutter project.
 
