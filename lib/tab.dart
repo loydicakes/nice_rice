@@ -21,8 +21,8 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  // Pill sizing/placement
-  static const double _pillHeight = 60;
+  // Base pill sizing/placement (we'll adapt height at runtime)
+  static const double _pillBaseHeight = 64;
   static const double _pillHorizontalMargin = 16;
   static const double _pillBottomGap = 12;
 
@@ -81,16 +81,22 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final view = MediaQuery.of(context);
+    final mq = MediaQuery.of(context);
     final cs = Theme.of(context).colorScheme;
-    final safeBottom = view.padding.bottom;
+    final safeBottom = mq.padding.bottom;
+
+    // Make the pill a bit taller when the user has larger text sizes.
+    final textScale = mq.textScaler.scale(1.0); // 1.0..N
+    final pillEffectiveHeight =
+        _pillBaseHeight + (textScale - 1.0) * 10.0 /* add up to +10px */;
 
     // Reserve space so content never sits under the floating pill
-    final reservedBottomSpace = _pillHeight + _pillBottomGap + safeBottom + 8;
+    final reservedBottomSpace =
+        pillEffectiveHeight + _pillBottomGap + safeBottom + 8;
 
     // Colors for nav icons/labels
     final selectedColor = context.brand;
-    final unselectedColor = cs.onSurface.withOpacity(0.55);
+    final unselectedColor = cs.onSurface.withOpacity(0.60);
 
     return StreamBuilder<User?>(
       stream: _authStream,
@@ -130,7 +136,8 @@ class _AppShellState extends State<AppShell> {
                 right: _pillHorizontalMargin,
                 bottom: _pillBottomGap + safeBottom,
                 child: _FloatingPillNav(
-                  height: _pillHeight,
+                  // pass the *effective* height
+                  height: pillEffectiveHeight,
                   index: _index,
                   onSelect: _onTapTab,
                   showAnalytics: _signedIn,
@@ -167,90 +174,200 @@ class _FloatingPillNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    final items = <NavigationDestination>[
-      NavigationDestination(
-        icon: Icon(Icons.home_rounded, color: unselectedColor),
-        selectedIcon: Icon(Icons.home_rounded, color: selectedColor),
-        label: 'Home',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.auto_awesome_rounded, color: unselectedColor),
-        selectedIcon:
-            Icon(Icons.auto_awesome_rounded, color: selectedColor),
-        label: 'Automation',
-      ),
-      if (showAnalytics)
-        NavigationDestination(
-          icon: Icon(Icons.analytics_rounded, color: unselectedColor),
-          selectedIcon:
-              Icon(Icons.analytics_rounded, color: selectedColor),
-          label: 'Analytics',
-        ),
+    final items = <_PillItemData>[
+      _PillItemData(icon: Icons.home_rounded, label: 'Home'),
+      _PillItemData(icon: Icons.auto_awesome_rounded, label: 'Automation'),
+      if (showAnalytics) _PillItemData(icon: Icons.analytics_rounded, label: 'Analytics'),
     ];
 
-    return Material(
-      color: Colors.transparent,
-      elevation: 0,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            // Blur whatever is behind the pill
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(height: height),
-            ),
-            // Theme-aware translucent background + subtle border/shadow
-            Container(
-              height: height,
-              decoration: BoxDecoration(
-                color: cs.surfaceVariant, // adapts to dark/light
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: cs.outline.withOpacity(0.35)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x22000000),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                    offset: Offset(0, 6),
-                  ),
-                ],
+    // Cap text scaling inside the pill to avoid overflows on huge sizes.
+    final outerScaler = MediaQuery.of(context).textScaler;
+    final cappedScaler = TextScaler.linear(
+      outerScaler.scale(1.0).clamp(1.0, 1.2),
+    );
+
+    // Derive inner metrics from the pill height (robust across devices)
+    final iconSize   = height.clamp(52.0, 80.0) * 0.38;              // ~20–30
+    final labelBoxH  = (height * 0.28).clamp(12.0, 18.0);            // text box height
+    final vGap       = (height * 0.08).clamp(4.0, 8.0);              // space between icon/label
+    final innerPadV  = (height * 0.18).clamp(8.0, 12.0);             // vertical padding inside pill
+    final innerPadH  = 8.0;
+
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: cappedScaler),
+      child: Material(
+        color: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              // Blur behind the pill
+              BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: SizedBox(height: height),
               ),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  navigationBarTheme: NavigationBarThemeData(
-                    height: height,
-                    backgroundColor: Colors.transparent,
-                    indicatorColor: Colors.transparent,
-                    surfaceTintColor: Colors.transparent,
-                    iconTheme: MaterialStateProperty.resolveWith((states) {
-                      if (states.contains(MaterialState.selected)) {
-                        return IconThemeData(color: selectedColor);
-                      }
-                      return IconThemeData(color: unselectedColor);
-                    }),
-                    labelTextStyle:
-                        MaterialStateProperty.resolveWith((states) {
-                      final color = states.contains(MaterialState.selected)
-                          ? selectedColor
-                          : unselectedColor;
-                      return GoogleFonts.poppins(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: color,
+              // Translucent background with subtle border/shadow
+              Container(
+                height: height,
+                decoration: BoxDecoration(
+                  color: cs.surfaceVariant,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: cs.outline.withOpacity(0.35)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: innerPadH, vertical: innerPadV),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: List.generate(items.length, (i) {
+                      final d = items[i];
+                      final selected = i == index;
+                      return Expanded(
+                        child: _PillTab(
+                          data: d,
+                          selected: selected,
+                          selectedColor: selectedColor,
+                          unselectedColor: unselectedColor,
+                          onTap: () => onSelect(i),
+                          iconSize: iconSize,
+                          labelBoxHeight: labelBoxH,
+                          vGap: vGap,
+                        ),
                       );
                     }),
                   ),
                 ),
-                child: NavigationBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  indicatorColor: Colors.transparent,
-                  selectedIndex: index.clamp(0, items.length - 1),
-                  onDestinationSelected: onSelect,
-                  labelBehavior:
-                      NavigationDestinationLabelBehavior.alwaysShow,
-                  destinations: items,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PillTab extends StatelessWidget {
+  const _PillTab({
+    required this.data,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onTap,
+    required this.iconSize,
+    required this.labelBoxHeight,
+    required this.vGap,
+  });
+
+  final _PillItemData data;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onTap;
+
+  final double iconSize;
+  final double labelBoxHeight;
+  final double vGap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? selectedColor : unselectedColor;
+    final fontSize = (labelBoxHeight * 0.86).clamp(10.0, 14.0);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(data.icon, color: color, size: iconSize),
+            SizedBox(height: vGap),
+            SizedBox(
+              height: labelBoxHeight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  data.label,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w700,
+                    height: 1.0,
+                    color: color,
+                    letterSpacing: .1,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PillItemData {
+  final IconData icon;
+  final String label;
+  const _PillItemData({required this.icon, required this.label});
+}
+
+class _PillTab extends StatelessWidget {
+  const _PillTab({
+    required this.data,
+    required this.selected,
+    required this.selectedColor,
+    required this.unselectedColor,
+    required this.onTap,
+  });
+
+  final _PillItemData data;
+  final bool selected;
+  final Color selectedColor;
+  final Color unselectedColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? selectedColor : unselectedColor;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(data.icon, color: color, size: 22),
+            const SizedBox(height: 6),
+            // Keep label from overflowing vertically or horizontally
+            SizedBox(
+              height: 16, // fixed label box; prevents vertical overflow
+              child: FittedBox(
+                fit: BoxFit.scaleDown, // scales down on very small screens
+                child: Text(
+                  data.label,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    height: 1.0, // tight, predictable metrics
+                    color: color,
+                    letterSpacing: .1,
+                  ),
                 ),
               ),
             ),
