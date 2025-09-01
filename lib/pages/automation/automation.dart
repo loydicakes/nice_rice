@@ -8,8 +8,6 @@ import 'package:fluttertoast/fluttertoast.dart';
 
 import 'package:nice_rice/header.dart';
 import 'package:nice_rice/theme_controller.dart'; // ThemeScope + context.brand
-
-// Import the history repository (declared in analytics.dart)
 import 'package:nice_rice/pages/analytics/analytics.dart' show OperationHistory;
 
 class AutomationPage extends StatefulWidget {
@@ -28,41 +26,56 @@ class _AutomationPageState extends State<AutomationPage>
   @override
   bool get wantKeepAlive => true;
 
-  // ---------------------- Timers / State ----------------------
-  Timer? _timer;
-  Duration _remaining = const Duration(seconds: 0);
-  Duration _initial = const Duration(seconds: 0);
+  // ---------------------- Stopwatch / State ----------------------
+  Timer? _ticker;                    // 1s heartbeat
+  Duration _elapsed = Duration.zero; // UI stopwatch
   bool _isPaused = false;
   bool _isRunning = false;
   String? _currentOpId;
 
-  // Simulated sensors
+  // ---------------------- Sensors (simulated) ----------------------
   Timer? _sensorTimer;
   final Random _rand = Random();
-  double _moisture = 13.7;
-  double _temperature = 27.0;
+  double _moisture = 13.7;    // live MC %
+  double _temperature = 27.0; // live °C
+
+  // ---------------------- Drying target / estimator ----------------------
+  static const double _targetMc = 14.0;      // target MC(% wet basis)
+  double? _initialMc;                        // captured at session start
+  final List<_McSample> _mcHistory = [];     // rolling window for slope/ETA
+  static const int _historyMax = 120;        // ~4 minutes @ 2s interval (tune)
 
   @override
   void initState() {
     super.initState();
-    // Simulate sensor updates every 2s
+
+    // Simulate sensor updates every 2s (replace with your real stream)
     _sensorTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (!mounted) return;
+
+      // Simulated drift: moisture slides toward 14% with noise
+      final drift = (_moisture > _targetMc)
+          ? -0.05 + _rand.nextDouble() * 0.02
+          : 0.0 + _rand.nextDouble() * 0.02; // slightly jitter near/below target
+
       setState(() {
-        _moisture = 10 + _rand.nextDouble() * 10; // 10–20 %
+        _moisture = (_moisture + drift).clamp(10.0, 24.0);
         _temperature = 25 + _rand.nextDouble() * 5; // 25–30 °C
       });
 
-      // Log samples to Analytics only while running
-      if (_isRunning && _currentOpId != null) {
-        OperationHistory.instance.logReading(_currentOpId!, _moisture);
+      // Record history only during an active run
+      if (_isRunning) {
+        _pushMcSample(_moisture);
+        if (_currentOpId != null) {
+          OperationHistory.instance.logReading(_currentOpId!, _moisture);
+        }
       }
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _ticker?.cancel();
     _sensorTimer?.cancel();
 
     AutomationPage.isActive.value = false;
@@ -81,7 +94,77 @@ class _AutomationPageState extends State<AutomationPage>
 
   String _fmtTime(Duration d) {
     String two(int n) => n.toString().padLeft(2, "0");
-    return "${two(d.inMinutes.remainder(60))}:${two(d.inSeconds.remainder(60))}";
+    if (d.inHours > 0) {
+      return "${d.inHours}:${two(d.inMinutes.remainder(60))}:${two(d.inSeconds.remainder(60))}";
+    }
+    return "${two(d.inMinutes)}:${two(d.inSeconds.remainder(60))}";
+  }
+
+  // Color from dark yellow → light yellow
+  Color _ringColor(double p) {
+    return Color.lerp(
+      const Color(0xFFB58900), // dark yellow
+      const Color(0xFFFFFF8D), // light yellow
+      p.clamp(0.0, 1.0),
+    )!;
+  }
+
+  /// Push a moisture sample (timestamped) and keep a short rolling window.
+  void _pushMcSample(double mc) {
+    _mcHistory.add(_McSample(DateTime.now(), mc));
+    if (_mcHistory.length > _historyMax) {
+      _mcHistory.removeAt(0);
+    }
+  }
+
+  /// Estimate drying slope (Δ%MC per minute, negative when drying).
+  /// Uses simple linear regression over the last N samples for robustness.
+  double? _estimateSlopePerMin({int minPoints = 10}) {
+    final n = _mcHistory.length;
+    if (n < minPoints) return null;
+
+    // Convert to minutes since first sample to avoid large x-values
+    final t0 = _mcHistory.first.ts;
+    final xs = <double>[];
+    final ys = <double>[];
+    for (final s in _mcHistory) {
+      xs.add(s.ts.difference(t0).inMilliseconds / 60000.0); // minutes
+      ys.add(s.mc);
+    }
+
+    // Linear regression y = a + b*x
+    final meanX = xs.reduce((a, b) => a + b) / xs.length;
+    final meanY = ys.reduce((a, b) => a + b) / ys.length;
+
+    double num = 0.0, den = 0.0;
+    for (var i = 0; i < xs.length; i++) {
+      final dx = xs[i] - meanX;
+      num += dx * (ys[i] - meanY);
+      den += dx * dx;
+    }
+    if (den == 0) return null;
+
+    final b = num / den; // slope in %MC per minute (should be negative)
+    // Smooth a bit with last computed slope if you want (omitted here for clarity)
+    return b;
+  }
+
+  /// Progress toward 14% based on initial MC and current MC.
+  double get _targetProgress {
+    if (_initialMc == null) return 0.0;
+    final span = (_initialMc! - _targetMc);
+    if (span <= 0) return 1.0; // edge case: already <= target at start
+    final done = (_initialMc! - _moisture);
+    return (done / span).clamp(0.0, 1.0);
+  }
+
+  /// ETA (minutes) to reach 14% based on current slope.
+  double? get _etaMinutes {
+    final slope = _estimateSlopePerMin();
+    if (slope == null || slope >= -1e-6) return null; // need negative slope
+    final delta = (_moisture - _targetMc);
+    if (delta <= 0) return 0.0;
+    return delta / (-slope);
   }
 
   Future<void> _confirm({
@@ -116,131 +199,62 @@ class _AutomationPageState extends State<AutomationPage>
     );
   }
 
-  Future<void> _setTime() async {
-    if (_isRunning) {
-      Fluttertoast.showToast(msg: "Operation is ongoing, stop first to reset");
-      return;
-    }
-
-    final cs = Theme.of(context).colorScheme;
-    final minC = TextEditingController();
-    final secC = TextEditingController();
-
-    TextStyle t(double sz, {FontWeight? w, Color? c}) =>
-        GoogleFonts.poppins(fontSize: sz, fontWeight: w, color: c ?? cs.onSurface);
-
-    int minutes = 0;
-    int seconds = 0;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text("Set Timer", style: t(18, w: FontWeight.w700)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: minC,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Minutes"),
-            ),
-            TextField(
-              controller: secC,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Seconds"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancel", style: t(14, w: FontWeight.w600, c: context.brand)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              minutes = int.tryParse(minC.text) ?? 0;
-              seconds = int.tryParse(secC.text) ?? 0;
-              Navigator.pop(ctx);
-            },
-            child: Text("OK", style: t(14, w: FontWeight.w700, c: cs.onPrimary)),
-          ),
-        ],
-      ),
-    );
-
+  // ---------------------- Controls ----------------------
+  void _startStopwatch() {
     setState(() {
-      _initial = Duration(minutes: minutes, seconds: seconds);
-      _remaining = _initial;
+      _isRunning = true;
+      _isPaused = false;
+      _elapsed = Duration.zero;
+      _initialMc = _moisture;  // capture starting MC for progress
+      _mcHistory.clear();
+      _pushMcSample(_moisture);
     });
-  }
 
-  double get _progress {
-    final total = _initial.inSeconds;
-    if (total <= 0) return 0.0;
-    final done = total - _remaining.inSeconds;
-    return (done / total).clamp(0.0, 1.0);
-  }
+    AutomationPage.isActive.value = true;
+    AutomationPage.progress.value = _targetProgress;
 
-  void _startTimer() {
-    if (_remaining.inSeconds > 0) {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
-        _isRunning = true;
-        _isPaused = false;
+        _elapsed += const Duration(seconds: 1);
+        // (moisture samples are pushed by the sensor timer)
       });
+      AutomationPage.progress.value = _targetProgress;
+    });
 
-      AutomationPage.isActive.value = true;
-      AutomationPage.progress.value = _progress;
-
-      _timer?.cancel();
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_remaining.inSeconds > 0) {
-          setState(() {
-            _remaining -= const Duration(seconds: 1);
-          });
-          AutomationPage.progress.value = _progress;
-        } else {
-          _timer?.cancel();
-          setState(() {
-            _isRunning = false;
-            _isPaused = false;
-          });
-          AutomationPage.isActive.value = false;
-          AutomationPage.progress.value = 0.0;
-
-          if (_currentOpId != null) {
-            OperationHistory.instance.logReading(_currentOpId!, _moisture);
-            OperationHistory.instance.endOperation(_currentOpId!);
-            _currentOpId = null;
-          }
-        }
-      });
-    }
+    // Start operation log
+    _currentOpId = OperationHistory.instance.startOperation();
+    OperationHistory.instance.logReading(_currentOpId!, _moisture);
   }
 
-  void _pauseTimer() {
-    _timer?.cancel();
+  void _pauseStopwatch() {
+    _ticker?.cancel();
     setState(() {
       _isPaused = true;
       _isRunning = false;
     });
-    AutomationPage.isActive.value = true;
-    AutomationPage.progress.value = _progress;
+    AutomationPage.isActive.value = true; // still “active” but paused
+    AutomationPage.progress.value = _targetProgress;
   }
 
-  void _resumeTimer() {
-    _startTimer();
+  void _resumeStopwatch() {
     setState(() {
       _isPaused = false;
       _isRunning = true;
     });
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {
+        _elapsed += const Duration(seconds: 1);
+      });
+      AutomationPage.progress.value = _targetProgress;
+    });
   }
 
-  void _stopTimer() {
-    _timer?.cancel();
+  void _stopStopwatch() {
+    _ticker?.cancel();
     setState(() {
-      _remaining = const Duration(seconds: 0);
-      _initial = const Duration(seconds: 0);
+      _elapsed = Duration.zero;
       _isPaused = false;
       _isRunning = false;
     });
@@ -285,7 +299,7 @@ class _AutomationPageState extends State<AutomationPage>
             final double dotSize   = (18 * scale).clamp(14, 24).toDouble();
             final double timerText = (48 * scale).clamp(36, 64).toDouble();
 
-            // ------------------ Buttons styles (theme-aware) ------------------
+            // Buttons
             final ButtonStyle startStyle = ElevatedButton.styleFrom(
               backgroundColor: context.brand,
               foregroundColor: cs.onPrimary,
@@ -322,18 +336,7 @@ class _AutomationPageState extends State<AutomationPage>
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
             );
 
-            final ButtonStyle setStyle = OutlinedButton.styleFrom(
-              foregroundColor: context.brand,
-              side: BorderSide(color: context.brand, width: (1.2 * scale).clamp(1, 1.6).toDouble()),
-              padding: EdgeInsets.symmetric(
-                horizontal: (22 * scale).clamp(16, 28).toDouble(),
-                vertical: (12 * scale).clamp(9, 16).toDouble(),
-              ),
-              minimumSize: Size(0, (40 * scale).clamp(36, 48).toDouble()),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-            );
-
-            // ------------------ Sub-widgets ------------------
+            // Typo helper
             TextStyle t(double sz, {FontWeight? w, Color? c}) =>
                 GoogleFonts.poppins(fontSize: sz, fontWeight: w, color: c ?? cs.onSurface);
 
@@ -363,80 +366,40 @@ class _AutomationPageState extends State<AutomationPage>
               );
             }
 
-            Widget controlsRow() {
-              Widget label(String text) => FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      text,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: t((14 * scale).clamp(12, 18).toDouble(), w: FontWeight.w700, c: Colors.white),
-                    ),
-                  );
-
-              return Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: stopStyle,
-                      onPressed: () {
-                        if (!(_isRunning || _isPaused)) return;
-                        _confirm(
-                          title: "Stop Timer",
-                          message: "You are about to stop the operation.",
-                          onConfirm: _stopTimer,
-                        );
-                      },
-                      child: label("Stop"),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: pauseResumeStyle,
-                      onPressed: () {
-                        if (_timer != null && _timer!.isActive) {
-                          _pauseTimer();
-                        } else if (_isPaused) {
-                          _resumeTimer();
-                        }
-                      },
-                      child: label(_isPaused ? "Resume" : "Pause"),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: startStyle,
-                      onPressed: () {
-                        if (_isRunning) {
-                          Fluttertoast.showToast(msg: "Operation is ongoing, stop first to restart");
-                          return;
-                        }
-                        if (_remaining.inSeconds == 0) {
-                          Fluttertoast.showToast(msg: "Please set a timer first");
-                          return;
-                        }
-                        _confirm(
-                          title: "Start Timer",
-                          message: "You are about to start the operation.",
-                          onConfirm: () {
-                            Fluttertoast.showToast(msg: "Operation is ongoing");
-                            _currentOpId = OperationHistory.instance.startOperation();
-                            OperationHistory.instance.logReading(_currentOpId!, _moisture);
-                            _startTimer();
-                          },
-                        );
-                      },
-                      child: label("Start"),
-                    ),
-                  ),
-                ],
+            Widget etaBadge() {
+              final eta = _etaMinutes;
+              String txt;
+              if (eta == null) {
+                txt = "Estimating…";
+              } else if (eta <= 0) {
+                txt = "At/Below 14%";
+              } else if (eta < 60) {
+                txt = "~${eta.ceil()} min remaining";
+              } else {
+                final h = (eta / 60).floor();
+                final m = (eta % 60).ceil();
+                txt = "~${h}h ${m}m remaining";
+              }
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (10 * scale).clamp(8, 14).toDouble(),
+                  vertical: (6 * scale).clamp(4, 10).toDouble(),
+                ),
+                decoration: BoxDecoration(
+                  color: cs.secondaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  txt,
+                  style: t((12 * scale).clamp(11, 15).toDouble(),
+                      w: FontWeight.w700, c: cs.onSecondaryContainer),
+                ),
               );
             }
 
-            final dotColor =
-                Color.lerp(Colors.green, const Color(0xFFC62828), _progress) ?? Colors.green;
+            final ringProgress = _targetProgress;       // drives arc completion
+            final colorProgress = ringProgress;         // drives color dark→light
+            final dotColor = _ringColor(colorProgress); // dot color
 
             // ------------------ Layout ------------------
             return Align(
@@ -457,86 +420,92 @@ class _AutomationPageState extends State<AutomationPage>
 
                       const SizedBox(height: 14),
 
-                      // ───────── Timer Card ─────────
+                      // ───────── Session Tracker Card ─────────
                       Card(
                         child: Padding(
                           padding: EdgeInsets.all(cardPad),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  "Automation Timer",
-                                  style: t((16 * scale).clamp(14, 20).toDouble(), w: FontWeight.w700, c: context.brand),
-                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    "Session Tracker",
+                                    style: t((16 * scale).clamp(14, 20).toDouble(),
+                                        w: FontWeight.w700, c: context.brand),
+                                  ),
+                                  etaBadge(),
+                                ],
                               ),
                               const SizedBox(height: 12),
 
-                              // Circular timer with moving dot + gradient trail
-                              SizedBox(
-                                width: timerSide,
-                                height: timerSide,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    CustomPaint(
-                                      size: Size.square(timerSide),
-                                      painter: _TimerRingPainter(
-                                        context: context,
-                                        progress: _progress,
-                                        track: ringTrack,
-                                        stroke: ringStroke,
+                              // Circular progress based on target progress
+                              LayoutBuilder(builder: (_, __) {
+                                final double side = timerSide;
+                                return SizedBox(
+                                  width: side,
+                                  height: side,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      CustomPaint(
+                                        size: Size.square(side),
+                                        painter: _TargetRingPainter(
+                                          context: context,
+                                          progress: ringProgress,
+                                          track: ringTrack,
+                                          stroke: ringStroke,
+                                          color: _ringColor(colorProgress),
+                                        ),
                                       ),
-                                    ),
-                                    // Moving dot (starts at 12 o’clock)
-                                    Transform.rotate(
-                                      angle: 2 * math.pi * _progress,
-                                      child: Align(
-                                        alignment: Alignment.topCenter,
-                                        child: Container(
-                                          width: dotSize,
-                                          height: dotSize,
-                                          decoration: BoxDecoration(
-                                            color: dotColor,
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: dotColor.withOpacity(0.45),
-                                                blurRadius: (10 * scale).clamp(6, 14).toDouble(),
-                                                spreadRadius: (2 * scale).clamp(1, 3).toDouble(),
-                                              ),
-                                            ],
+                                      // Moving dot at the tip of the arc
+                                      Transform.rotate(
+                                        angle: 2 * math.pi * ringProgress,
+                                        child: Align(
+                                          alignment: Alignment.topCenter,
+                                          child: Container(
+                                            width: dotSize,
+                                            height: dotSize,
+                                            decoration: BoxDecoration(
+                                              color: dotColor,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: dotColor.withOpacity(0.45),
+                                                  blurRadius: (10 * scale).clamp(6, 14).toDouble(),
+                                                  spreadRadius: (2 * scale).clamp(1, 3).toDouble(),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    // Center readout & Set
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _fmtTime(_remaining),
-                                          style: t(timerText, w: FontWeight.w800),
-                                        ),
-                                        SizedBox(height: (12 * scale).clamp(8, 16).toDouble()),
-                                        OutlinedButton(
-                                          style: setStyle,
-                                          onPressed: _setTime,
-                                          child: Text(
-                                            "Set",
-                                            maxLines: 1,
-                                            softWrap: false,
-                                            style: t((14 * scale).clamp(12, 18).toDouble(), w: FontWeight.w700, c: context.brand),
+                                      // Center readout
+                                      Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _fmtTime(_elapsed),
+                                            style: t(timerText, w: FontWeight.w800),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                          SizedBox(height: (6 * scale).clamp(4, 10).toDouble()),
+                                          Text(
+                                            _initialMc == null
+                                                ? "— / ${_targetMc.toStringAsFixed(0)}% MC"
+                                                : "${_moisture.toStringAsFixed(1)}% → ${_targetMc.toStringAsFixed(0)}%",
+                                            style: t((14 * scale).clamp(12, 18).toDouble(),
+                                                w: FontWeight.w600, c: cs.onSurface.withOpacity(0.8)),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
 
                               SizedBox(height: (16 * scale).clamp(12, 22).toDouble()),
-                              controlsRow(),
+                              _controlsRow(startStyle, pauseResumeStyle, stopStyle, t),
                             ],
                           ),
                         ),
@@ -549,6 +518,78 @@ class _AutomationPageState extends State<AutomationPage>
           },
         ),
       ),
+    );
+  }
+
+  // ------- Controls Row -------
+  Widget _controlsRow(
+    ButtonStyle startStyle,
+    ButtonStyle pauseResumeStyle,
+    ButtonStyle stopStyle,
+    TextStyle Function(double, {FontWeight? w, Color? c}) t,
+  ) {
+    Widget label(String text) => FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            softWrap: false,
+            style: t(14, w: FontWeight.w700, c: Colors.white),
+          ),
+        );
+
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            style: stopStyle,
+            onPressed: () {
+              if (!(_isRunning || _isPaused)) return;
+              _confirm(
+                title: "Stop Session",
+                message: "You are about to stop the current session.",
+                onConfirm: _stopStopwatch,
+              );
+            },
+            child: label("Stop"),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: ElevatedButton(
+            style: pauseResumeStyle,
+            onPressed: () {
+              if (_ticker != null && _isRunning) {
+                _pauseStopwatch();
+              } else if (_isPaused) {
+                _resumeStopwatch();
+              }
+            },
+            child: label(_isPaused ? "Resume" : "Pause"),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: ElevatedButton(
+            style: startStyle,
+            onPressed: () {
+              if (_isRunning) {
+                Fluttertoast.showToast(msg: "Session is ongoing, stop first to restart");
+                return;
+              }
+              _confirm(
+                title: "Start Session",
+                message: "Start a new drying session?",
+                onConfirm: () {
+                  Fluttertoast.showToast(msg: "Session started");
+                  _startStopwatch();
+                },
+              );
+            },
+            child: label("Start"),
+          ),
+        ),
+      ],
     );
   }
 
@@ -570,7 +611,6 @@ class _AutomationPageState extends State<AutomationPage>
         bg: cs.surfaceVariant,
         border: cs.outline,
         icon: icon,
-        // 👇 matches the expected named-parameter signature
         textBuilder: ({
           double? size,
           FontWeight? weight,
@@ -578,8 +618,7 @@ class _AutomationPageState extends State<AutomationPage>
           double? height,
           TextDecoration? deco,
         }) {
-          final effective =
-              color == const Color(0x00000000) ? cs.onSurface : color;
+          final effective = color == const Color(0x00000000) ? cs.onSurface : color;
           return GoogleFonts.poppins(
             fontSize: size,
             fontWeight: weight,
@@ -593,7 +632,7 @@ class _AutomationPageState extends State<AutomationPage>
   }
 }
 
-/// Metric tile styled like HomePage tiles, but theme-aware
+/// Metric tile (theme-aware)
 class _MetricBox extends StatelessWidget {
   final String label;
   final String value;
@@ -666,18 +705,18 @@ class _MetricBox extends StatelessWidget {
   }
 }
 
-/// Paints the circular timer ring with theme colors:
-/// - Base track uses onSurface (low opacity)
-/// - Progress arc sweeps brand → amber → red
-class _TimerRingPainter extends CustomPainter {
+// ───────────────────────────────── Painter (progress to target) ────────────────────────────────
+class _TargetRingPainter extends CustomPainter {
   final BuildContext context;
-  final double progress; // 0.0 → 1.0
+  final double progress; // 0.0 → 1.0 (toward target MC)
   final double track;
   final double stroke;
+  final Color color;
 
-  _TimerRingPainter({
+  _TargetRingPainter({
     required this.context,
     required this.progress,
+    required this.color,
     this.track = 8,
     this.stroke = 12,
   });
@@ -694,13 +733,7 @@ class _TimerRingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final progressPaint = Paint()
-      ..shader = SweepGradient(
-        startAngle: -math.pi / 2,
-        endAngle: 3 * math.pi / 2,
-        colors: [context.brand, Colors.amber.shade700, const Color(0xFFC62828)],
-        stops: const [0.0, 0.6, 1.0],
-        transform: const GradientRotation(-math.pi / 2), // start at 12 o’clock
-      ).createShader(Rect.fromCircle(center: center, radius: radius))
+      ..color = color
       ..strokeWidth = stroke
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -711,10 +744,20 @@ class _TimerRingPainter extends CustomPainter {
     // Progress arc
     final sweep = 2 * math.pi * progress;
     final rect = Rect.fromCircle(center: center, radius: radius);
-    canvas.drawArc(rect, -math.pi / 2, sweep, false, progressPaint);
+
   }
 
   @override
-  bool shouldRepaint(covariant _TimerRingPainter old) =>
-      old.progress != progress || old.track != track || old.stroke != stroke;
+  bool shouldRepaint(covariant _TargetRingPainter old) =>
+      old.progress != progress ||
+      old.track != track ||
+      old.stroke != stroke ||
+      old.color != color;
+}
+
+// Simple container for moisture history
+class _McSample {
+  final DateTime ts;
+  final double mc;
+  _McSample(this.ts, this.mc);
 }

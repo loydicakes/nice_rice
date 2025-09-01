@@ -9,29 +9,29 @@ import 'firebase_options.dart';
 import 'pages/landingpage/landing_page.dart';
 import 'pages/login/login.dart';
 import 'pages/landingpage/splash_screen.dart';
-import 'tab.dart'; // AppShell
+import 'tab.dart';     // AppShell
 import 'header.dart';
-import 'package:nice_rice/pages/homepage/home_page.dart';
-
+import 'pages/homepage/home_page.dart';
 
 // Theme controller
 import 'theme_controller.dart';
 
 final ThemeController _theme = ThemeController();
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Initialize Firebase BEFORE runApp so SplashScreen can use it safely.
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(
     ThemeScope(
       controller: _theme,
       child: const BootstrapApp(),
     ),
   );
-  _init();
-}
-
-Future<void> _init() async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
 /// Single app entry that owns MaterialApp + theming.
@@ -49,17 +49,17 @@ class BootstrapApp extends StatelessWidget {
           theme: AppThemes.light(),
           darkTheme: AppThemes.dark(),
           themeMode: theme.mode,
-          // Page transitions belong in ThemeData (already set in AppThemes)
+          // ✅ SplashScreen is now the first screen again.
           home: const SplashScreen(),
           routes: {
             '/landing': (_) => const LandingPage(),
-            '/login': (_) => const LoginPage(),
+            '/login':   (_) => const LoginPage(),
             '/main': (ctx) {
-              final int? initial = ModalRoute.of(ctx)?.settings.arguments as int?;
+              final int? initial =
+                  ModalRoute.of(ctx)?.settings.arguments as int?;
               return AppShell(initialIndex: initial ?? 0);
             },
-            // optional direct route
-            '/home': (_) => HomePage(),
+            '/home': (_) => const HomePage(),
           },
         );
       },
