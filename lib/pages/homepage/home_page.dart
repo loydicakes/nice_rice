@@ -1,7 +1,9 @@
 // lib/pages/homepage/home_page.dart
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:nice_rice/header.dart';
@@ -18,7 +20,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   @override
   bool get wantKeepAlive => true;
 
-  // ─── Fake sensor stream ────────────────────────────────────────────────────
+  // Fake sensor stream
   final _rand = Random();
   Timer? _sensorTimer;
   Timer? _clockTimer;
@@ -28,28 +30,31 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   double _humidity = 38;
   double _moisture = 15;
 
-  // rolling history for stats (keep last N samples)
+  // rolling history
   final List<double> _moistureHistory = [];
-  static const int _historyCap = 24; // ~ last 24 samples
+  static const int _historyCap = 24;
+
+  // platform channel (no plugins, no gradle changes)
+  static const MethodChannel _bleChannel =
+      MethodChannel('app.bluetooth/controls');
+
+  bool _isConnecting = false;
 
   @override
   void initState() {
     super.initState();
 
-    // seed history so stats render immediately
     for (int i = 0; i < 6; i++) {
-      final m = 13 + _rand.nextInt(6).toDouble(); // 13–18
+      final m = 13 + _rand.nextInt(6).toDouble();
       _moistureHistory.add(m);
     }
 
-    // sensor updates
     _sensorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
       setState(() {
-        _tempC = 55 + _rand.nextDouble() * 10; // 55–65
-        _humidity = 30 + _rand.nextDouble() * 15; // 30–45
-        _moisture = 13 + _rand.nextInt(6).toDouble(); // 13–18
-
+        _tempC = 55 + _rand.nextDouble() * 10;
+        _humidity = 30 + _rand.nextDouble() * 15;
+        _moisture = 13 + _rand.nextInt(6).toDouble();
         _moistureHistory.add(_moisture);
         if (_moistureHistory.length > _historyCap) {
           _moistureHistory.removeAt(0);
@@ -57,7 +62,6 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
       });
     });
 
-    // real-time clock tick (if you show time)
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -70,7 +74,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     super.dispose();
   }
 
-  // ─── Domain helpers ────────────────────────────────────────────────────────
+  // Domain helpers
   String _statusText(double m) {
     if (m >= 13 && m <= 14) return "Safe";
     if (m >= 15 && m <= 16) return "Warning";
@@ -89,31 +93,15 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
     }
   }
 
-  double get _avgMoisture {
-    if (_moistureHistory.isEmpty) return _moisture;
-    final sum = _moistureHistory.fold<double>(0, (a, b) => a + b);
-    return sum / _moistureHistory.length; // keep as percentage points (not 0–1)
-  }
-
-  double get _minMoisture =>
-      _moistureHistory.isEmpty ? _moisture : _moistureHistory.reduce(min);
-
-  double get _maxMoisture =>
-      _moistureHistory.isEmpty ? _moisture : _moistureHistory.reduce(max);
-
-  /// Change = last - first (percentage points).
-  /// Negative → falling, Positive → rising, ~0 → steady.
   double get _change {
     if (_moistureHistory.length < 2) return 0;
-    final first = _moistureHistory.first;
-    final last = _moistureHistory.last;
-    return (last - first);
+    return _moistureHistory.last - _moistureHistory.first;
   }
 
   String _formatDate(DateTime dt) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December',
     ];
     return "${months[dt.month - 1]} ${dt.day}, ${dt.year}";
   }
@@ -139,17 +127,120 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
         height: height,
       );
 
-  // ─── Responsive helpers ────────────────────────────────────────────────────
+  double _scaleForWidth(double width) => (width / 375).clamp(0.85, 1.25).toDouble();
 
-  /// Returns a scale factor relative to a 375px-wide phone, clamped for sanity.
-  double _scaleForWidth(double width) {
-    return (width / 375).clamp(0.85, 1.25).toDouble();
+  // ─── Connect + device picker (Android only) ────────────────────────────────
+  Future<void> _onConnectPressed() async {
+    if (!Platform.isAndroid) {
+      _toast('Bluetooth flow is Android-only in this build.');
+      return;
+    }
+    if (_isConnecting) return;
+
+    setState(() => _isConnecting = true);
+    try {
+      final ok = await _bleChannel.invokeMethod<bool>('ensureBluetoothOn') ?? false;
+      if (!ok) {
+        _toast('Bluetooth is still OFF.');
+        return;
+      }
+      // Fetch bonded first (fast), then do a short discovery and merge results.
+      final bonded = await _bleChannel.invokeMethod<List<dynamic>>('listBondedDevices') ?? [];
+      final discovered = await _bleChannel.invokeMethod<List<dynamic>>('discoverDevices') ?? [];
+
+      final devices = _mergeDevices(bonded, discovered);
+      if (devices.isEmpty) {
+        _toast('No devices found nearby.');
+        return;
+      }
+      _showDevicePicker(devices);
+    } on PlatformException catch (e) {
+      _toast('Bluetooth error: ${e.message ?? e.code}');
+    } catch (e) {
+      _toast('Unexpected error: $e');
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
+    }
+  }
+
+  List<Map<String, String>> _mergeDevices(List<dynamic> a, List<dynamic> b) {
+    // Expect each item: { "name": "...", "address": "XX:XX:..." }
+    final Map<String, Map<String, String>> byAddr = {};
+    for (final src in [a, b]) {
+      for (final it in src) {
+        if (it is Map) {
+          final addr = (it['address'] ?? '').toString();
+          if (addr.isEmpty) continue;
+          final name = (it['name'] ?? '').toString();
+          byAddr.putIfAbsent(addr, () => {"name": name, "address": addr});
+          // prefer non-empty names
+          if ((byAddr[addr]!["name"] ?? "").isEmpty && name.isNotEmpty) {
+            byAddr[addr]!["name"] = name;
+          }
+        }
+      }
+    }
+    // sort: named first, then by name
+    final list = byAddr.values.toList();
+    list.sort((x, y) {
+      final xn = (x["name"] ?? "").isEmpty ? "zzzz" : x["name"]!;
+      final yn = (y["name"] ?? "").isEmpty ? "zzzz" : y["name"]!;
+      return xn.toLowerCase().compareTo(yn.toLowerCase());
+    });
+    return list;
+  }
+
+  void _showDevicePicker(List<Map<String, String>> devices) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Text("Select a device", style: _textStyle(context, size: 18, weight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: devices.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final d = devices[i];
+                    final name = (d["name"] ?? "").isEmpty ? "(Unnamed)" : d["name"]!;
+                    final addr = d["address"] ?? "";
+                    return ListTile(
+                      leading: const Icon(Icons.bluetooth),
+                      title: Text(name, style: _textStyle(context, size: 16, weight: FontWeight.w600)),
+                      subtitle: Text(addr, style: _textStyle(context, size: 12, weight: FontWeight.w400, color: Colors.grey[600])),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toast('Selected $name ($addr)\nTODO: connect to this device.');
+                        // TODO: if you want actual RFCOMM connect next, tell me your module profile (SPP/UUID).
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final theme = ThemeScope.of(context); // for header toggle
+    final theme = ThemeScope.of(context);
     final now = DateTime.now();
 
     return Scaffold(
@@ -161,37 +252,13 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
         child: LayoutBuilder(
           builder: (context, constraints) {
             final maxW = constraints.maxWidth;
-
-            // Breakpoints
-            final bool isCompact = maxW < 420;     // small phones
-            final bool isTablet = maxW >= 700;     // tablets and up
-
+            final bool isCompact = maxW < 420;
+            final bool isTablet = maxW >= 700;
             final scale = _scaleForWidth(maxW);
-
-            // Scaled dimensions
-            final double imgHeight = (120 * scale).clamp(96, 160).toDouble();
-            final double imgWidth = imgHeight * 0.8;
-            final double dateFs = (18 * scale).clamp(14, 24).toDouble();
-            final double timeFs = (14 * scale).clamp(12, 20).toDouble();
-            final double btnVPad = (12 * scale).clamp(8, 18).toDouble();
-            const double btnHPad = 20.0;
-
-            // Grid config (normal aspect since status tile is shorter now)
-            final int gridCols = isTablet ? 3 : 2;
-            final double gridAspect = isTablet ? 1.18 : (isCompact ? 0.95 : 1.05);
-
-            // Content max width for very wide layouts
             final double contentMaxWidth = isTablet ? 800.0 : 600.0;
 
             final status = _statusText(_moisture);
             final statusColor = _statusColor(status);
-
-            // change label text (kept for future but not displayed in tile)
-            final changeArrow = _change < -0.2 ? "⬇︎" : (_change > 0.2 ? "⬆︎" : "→");
-            final changeWord =
-                _change < -0.2 ? "falling" : (_change > 0.2 ? "rising" : "steady");
-            final changePretty =
-                "${_change >= 0 ? "+" : ""}${_change.toStringAsFixed(1)}%";
 
             return Align(
               alignment: Alignment.topCenter,
@@ -201,108 +268,108 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // ───────── Header card (image + date/time + connect) ─────────
-Card(
-  child: Padding(
-    padding: const EdgeInsets.all(16),
-    child: LayoutBuilder(
-      builder: (ctx, box) {
-        // Image width adapts to available card width, but stays within sane bounds.
-        final double imgW = (box.maxWidth * 0.28).clamp(92.0, 160.0).toDouble();
-        final double imgH = (imgW * 1.25).clamp(110.0, 200.0).toDouble();
+                      // Header card
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: LayoutBuilder(
+                            builder: (ctx, box) {
+                              final double imgW = (box.maxWidth * 0.28).clamp(92.0, 160.0).toDouble();
+                              final double imgH = (imgW * 1.25).clamp(110.0, 200.0).toDouble();
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Image is hard-bounded, clipped, and cannot spill
-            SizedBox(
-              width: imgW,
-              height: imgH,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  "assets/images/pon.png",
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-
-            // Date / time / Connect stays to the right and wraps nicely on small screens
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _formatDate(DateTime.now()),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _textStyle(
-                      context,
-                      size: (18 * _scaleForWidth(box.maxWidth)).clamp(14, 22).toDouble(),
-                      weight: FontWeight.w700,
-                      color: context.brand,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatTime(DateTime.now()),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _textStyle(
-                      context,
-                      size: (14 * _scaleForWidth(box.maxWidth)).clamp(12, 18).toDouble(),
-                      weight: FontWeight.w400,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Button won’t force overflow; it shrinks and wraps if space is tight
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 120),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: (12 * _scaleForWidth(box.maxWidth)).clamp(8, 16).toDouble(),
-                          ),
-                        ),
-                        onPressed: () {},
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            "Connect",
-                            style: _textStyle(
-                              context,
-                              size: (16 * _scaleForWidth(box.maxWidth)).clamp(13, 20).toDouble(),
-                              weight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: imgW,
+                                    height: imgH,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Image.asset("assets/images/pon.png", fit: BoxFit.cover),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _formatDate(now),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: _textStyle(
+                                            context,
+                                            size: (18 * _scaleForWidth(box.maxWidth)).clamp(14, 22).toDouble(),
+                                            weight: FontWeight.w700,
+                                            color: context.brand,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _formatTime(now),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: _textStyle(
+                                            context,
+                                            size: (14 * _scaleForWidth(box.maxWidth)).clamp(12, 18).toDouble(),
+                                            weight: FontWeight.w400,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(minWidth: 120),
+                                            child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 20,
+                                                  vertical: (12 * _scaleForWidth(box.maxWidth)).clamp(8, 16).toDouble(),
+                                                ),
+                                              ),
+                                              onPressed: _isConnecting ? null : _onConnectPressed,
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    if (_isConnecting)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(right: 8.0),
+                                                        child: SizedBox(
+                                                          width: 16, height: 16,
+                                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                        ),
+                                                      ),
+                                                    Text(
+                                                      "Connect",
+                                                      style: _textStyle(
+                                                        context,
+                                                        size: (16 * _scaleForWidth(box.maxWidth)).clamp(13, 20).toDouble(),
+                                                        weight: FontWeight.w700,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    ),
-  ),
-),
-
 
                       const SizedBox(height: 14),
 
-                      // ───────── Drying Chamber ─────────
+                      // Drying Chamber
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -313,22 +380,10 @@ Card(
                                 children: [
                                   Text(
                                     "Drying Chamber",
-                                    style: _textStyle(
-                                      context,
-                                      size: (15 * scale).clamp(13, 18).toDouble(),
-                                      weight: FontWeight.w700,
-                                      color: context.brand,
-                                    ),
+                                    style: _textStyle(context, size: (15 * scale).clamp(13, 18).toDouble(), weight: FontWeight.w700, color: context.brand),
                                   ),
                                   const Spacer(),
-                                  Text(
-                                    "%",
-                                    style: _textStyle(
-                                      context,
-                                      size: (13 * scale).clamp(11, 16).toDouble(),
-                                      weight: FontWeight.w600,
-                                    ),
-                                  ),
+                                  Text("%", style: _textStyle(context, size: (13 * scale).clamp(11, 16).toDouble(), weight: FontWeight.w600)),
                                 ],
                               ),
                               const SizedBox(height: 10),
@@ -347,7 +402,7 @@ Card(
 
                       const SizedBox(height: 14),
 
-                      // ───────── Storage Chamber ─────────
+                      // Storage Chamber
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -357,12 +412,7 @@ Card(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
                                   "Storage Chamber",
-                                  style: _textStyle(
-                                    context,
-                                    size: (16 * scale).clamp(14, 20).toDouble(),
-                                    weight: FontWeight.w700,
-                                    color: context.brand,
-                                  ),
+                                  style: _textStyle(context, size: (16 * scale).clamp(14, 20).toDouble(), weight: FontWeight.w700, color: context.brand),
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -370,36 +420,16 @@ Card(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: gridCols,
+                                  crossAxisCount: isTablet ? 3 : 2,
                                   crossAxisSpacing: 12,
                                   mainAxisSpacing: 12,
-                                  childAspectRatio: gridAspect,
+                                  childAspectRatio: isTablet ? 1.18 : (isCompact ? 0.95 : 1.05),
                                 ),
                                 children: [
-                                  _MetricTile(
-                                    icon: Icons.thermostat_outlined,
-                                    label: "Temperature",
-                                    value: "${_tempC.toStringAsFixed(0)}ºC",
-                                    scale: scale,
-                                  ),
-                                  _MetricTile(
-                                    icon: Icons.water_drop_outlined,
-                                    label: "Humidity",
-                                    value: "${_humidity.toStringAsFixed(0)}%",
-                                    scale: scale,
-                                  ),
-                                  _MetricTile(
-                                    icon: Icons.eco_outlined,
-                                    label: "Moisture Content",
-                                    value: "${_moisture.toStringAsFixed(1)}%",
-                                    scale: scale,
-                                  ),
-                                  // ⬇️ Simplified status tile (no bullets)
-                                  _StatusTile(
-                                    status: status,
-                                    color: statusColor,
-                                    scale: scale,
-                                  ),
+                                  _MetricTile(icon: Icons.thermostat_outlined, label: "Temperature", value: "${_tempC.toStringAsFixed(0)}ºC", scale: scale),
+                                  _MetricTile(icon: Icons.water_drop_outlined, label: "Humidity", value: "${_humidity.toStringAsFixed(0)}%", scale: scale),
+                                  _MetricTile(icon: Icons.eco_outlined, label: "Moisture Content", value: "${_moisture.toStringAsFixed(1)}%", scale: scale),
+                                  _StatusTile(status: status, color: statusColor, scale: scale),
                                 ],
                               ),
                             ],
@@ -418,7 +448,7 @@ Card(
   }
 }
 
-// ─── Tiles ───────────────────────────────────────────────────────────────────
+// Tiles (unchanged)
 
 class _MetricTile extends StatelessWidget {
   final IconData icon;
@@ -436,7 +466,6 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Container(
       decoration: BoxDecoration(
         color: context.tileFill,
@@ -490,7 +519,6 @@ class _StatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Container(
       decoration: BoxDecoration(
         color: context.tileFill,
@@ -507,7 +535,7 @@ class _StatusTile extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            status, // e.g., "At risk", "Safe", "Warning"
+            status,
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: (20 * scale).clamp(16, 26).toDouble(),
