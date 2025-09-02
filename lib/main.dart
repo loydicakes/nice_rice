@@ -9,7 +9,7 @@ import 'firebase_options.dart';
 import 'pages/landingpage/landing_page.dart';
 import 'pages/login/login.dart';
 import 'pages/landingpage/splash_screen.dart';
-import 'tab.dart';     // AppShell
+import 'tab.dart'; // AppShell
 import 'header.dart';
 import 'pages/homepage/home_page.dart';
 
@@ -22,16 +22,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ Initialize Firebase BEFORE runApp so SplashScreen can use it safely.
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  runApp(
-    ThemeScope(
-      controller: _theme,
-      child: const BootstrapApp(),
-    ),
-  );
+  runApp(ThemeScope(controller: _theme, child: const BootstrapApp()));
 }
 
 /// Single app entry that owns MaterialApp + theming.
@@ -53,7 +46,7 @@ class BootstrapApp extends StatelessWidget {
           home: const SplashScreen(),
           routes: {
             '/landing': (_) => const LandingPage(),
-            '/login':   (_) => const LoginPage(),
+            '/login': (_) => const LoginPage(),
             '/main': (ctx) {
               final int? initial =
                   ModalRoute.of(ctx)?.settings.arguments as int?;
