@@ -36,7 +36,7 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
 
   // platform channel (no plugins, no gradle changes)
   static const MethodChannel _bleChannel =
-      MethodChannel('app.bluetooth/controls');
+  MethodChannel('app.bluetooth/controls');
 
   bool _isConnecting = false;
 
@@ -114,12 +114,12 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
   }
 
   TextStyle _textStyle(
-    BuildContext context, {
-    double? size,
-    FontWeight? weight,
-    Color? color,
-    double? height,
-  }) =>
+      BuildContext context, {
+        double? size,
+        FontWeight? weight,
+        Color? color,
+        double? height,
+      }) =>
       GoogleFonts.poppins(
         fontSize: size,
         fontWeight: weight,
@@ -216,10 +216,22 @@ class _HomePageState extends State<HomePage> with AutomaticKeepAliveClientMixin 
                       leading: const Icon(Icons.bluetooth),
                       title: Text(name, style: _textStyle(context, size: 16, weight: FontWeight.w600)),
                       subtitle: Text(addr, style: _textStyle(context, size: 12, weight: FontWeight.w400, color: Colors.grey[600])),
-                      onTap: () {
+                      onTap: () async {
                         Navigator.pop(context);
-                        _toast('Selected $name ($addr)\nTODO: connect to this device.');
-                        // TODO: if you want actual RFCOMM connect next, tell me your module profile (SPP/UUID).
+                        try {
+                          setState(() => _isConnecting = true);
+                          final ok = await _bleChannel.invokeMethod<bool>('connect', {
+                            'address': addr,
+                            'type': 'spp',       // <-- SPP for your ESP32 BluetoothSerial
+                            'timeoutMs': 15000,
+                          }) ?? false;
+
+                          _toast(ok ? 'Connected to $name ($addr)' : 'Failed to connect to $name');
+                        } on PlatformException catch (e) {
+                          _toast('Connect error: ${e.message ?? e.code}');
+                        } finally {
+                          if (mounted) setState(() => _isConnecting = false);
+                        }
                       },
                     );
                   },
